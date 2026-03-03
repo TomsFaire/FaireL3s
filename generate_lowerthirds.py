@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""Generate Faire-style lower-third transparent PNGs (1920x1080).
+
+Single render:
+  python generate_lowerthirds.py --name "Max Rhodes" --title "Chief Executive Officer" --out lowerthird_max.png
+
+Batch from CSV:
+  python generate_lowerthirds.py --csv people.csv --out_dir out/
+
+CSV format:
+  name,title
+  Max Rhodes,Chief Executive Officer
+  Thuan Pham,Chief Technology Officer
+
+Fonts (recommended):
+  Put Inter in font/ or fonts/ (any of these names work):
+    Inter-SemiBold.ttf or Inter-Bold.ttf  (for the name line)
+    Inter-Regular.ttf                     (for the title line)
+
+If fonts aren't found, the script falls back to a default font.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import re
+from pathlib import Path
+from typing import Optional, Tuple
+
+from PIL import Image, ImageDraw, ImageFont
+
+THIS_DIR = Path(__file__).resolve().parent
+
+# Font folder: "font" or "fonts"
+def _fonts_dir() -> Path:
+    for name in ("font", "fonts"):
+        d = THIS_DIR / name
+        if d.is_dir():
+            return d
+    return THIS_DIR / "fonts"  # default for mkdir later
+
+# Inter name (bold) can be named differently across packages
+SEMIBOLD_CANDIDATES = ["Inter-SemiBold.ttf", "Inter-Bold.ttf", "InterSemiBold.ttf"]
+REGULAR_CANDIDATES = ["Inter-Regular.ttf", "InterRegular.ttf"]
+
+def _resolve_font(fonts_dir: Path, candidates: list[str]) -> Optional[Path]:
+    for name in candidates:
+        p = fonts_dir / name
+        if p.exists():
+            return p
+    if fonts_dir.exists():
+        lower_map = {f.name.lower(): f for f in fonts_dir.iterdir() if f.suffix.lower() == ".ttf"}
+        for name in candidates:
+            if name.lower() in lower_map:
+                return lower_map[name.lower()]
+    return None
+
+
+# When Inter isn't found, use a system TTF so text is full size (not PIL's tiny default)
+_SYSTEM_BOLD = [
+    Path("/System/Library/Fonts/Supplemental/Arial Bold.ttf"),
+    Path("/Library/Fonts/Arial Bold.ttf"),
+    Path("/System/Library/Fonts/Supplemental/Arial.ttf"),
+]
+_SYSTEM_REGULAR = [
+    Path("/System/Library/Fonts/Supplemental/Arial.ttf"),
+    Path("/Library/Fonts/Arial.ttf"),
+]
+
+def _system_font(for_bold: bool) -> Optional[Path]:
+    for p in (_SYSTEM_BOLD if for_bold else _SYSTEM_REGULAR):
+        if p.exists():
+            return p
+    for p in _SYSTEM_REGULAR + _SYSTEM_BOLD:
+        if p.exists():
+            return p
+    return None
+
+
+def load_style() -> dict:
+    style_path = THIS_DIR / "style.json"
+    if not style_path.exists():
+        raise FileNotFoundError(f"Missing style.json next to script: {style_path}")
+    return json.loads(style_path.read_text())
+
+
+def fit_font(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font_path: Optional[Path],
+    start_size: int,
+    max_width: int,
+    min_size: int = 16,
+    prefer_bold: bool = False,
+) -> ImageFont.ImageFont:
+    """Shrink font until text fits on one line. Uses system font if path missing (never tiny default)."""
+    if font_path is None or not font_path.exists():
+        font_path = _system_font(prefer_bold)
+    if font_path is None or not font_path.exists():
+        return ImageFont.load_default()
+
+    size = start_size
+    while size >= min_size:
+        f = ImageFont.truetype(str(font_path), size=size)
+        bbox = draw.textbbox((0, 0), text, font=f)
+        w = bbox[2] - bbox[0]
+        if w <= max_width:
+            return f
+        size -= 2
+
+    return ImageFont.truetype(str(font_path), size=min_size)
+
+
+def rounded_rectangle(draw: ImageDraw.ImageDraw, xy: Tuple[int, int, int, int], radius: int, fill, outline=None, width: int = 1):
+    """Compatibility wrapper."""
+    if hasattr(draw, "rounded_rectangle"):
+        draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
+    else:
+        draw.rectangle(xy, fill=fill, outline=outline, width=width)
+
+
+def render_lowerthird(name: str, title: str, out_path: Path, style: dict) -> None:
+    W, H = style["canvas"]["width"], style["canvas"]["height"]
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # Panel layout
+    panel_x = style["margins"]["left"]
+    panel_y = H - style["margins"]["bottom"] - style["panel"]["height"]
+    panel_w = style["panel"]["width"]
+    panel_h = style["panel"]["height"]
+
+    fill = tuple(style["panel"]["fill_rgba"])
+    border = tuple(style["panel"]["border_rgb"] + [style["panel"]["border_alpha"]])
+
+    rounded_rectangle(
+        draw,
+        (panel_x, panel_y, panel_x + panel_w, panel_y + panel_h),
+        radius=style["panel"]["radius"],
+        fill=fill,
+        outline=border,
+        width=style["panel"]["border_width"],
+    )
+
+    # Accent bar
+    bar = style["accent_bar"]
+    bar_x = panel_x + bar["x"]
+    bar_y = panel_y + bar["y"]
+    draw.rectangle(
+        (bar_x, bar_y, bar_x + bar["width"], bar_y + bar["height"]),
+        fill=tuple(bar["rgb"] + [bar["alpha"]]),
+    )
+
+    # Text positions
+    text_x = panel_x + style["panel"]["padding_left"] + bar["width"] + style["text"]["gap_x_after_bar"]
+    name_y = panel_y + style["text"]["name_y"]
+    title_y = panel_y + style["text"]["title_y"]
+    max_text_width = panel_x + panel_w - style["panel"]["padding_right"] - text_x
+
+    # Fonts: look in font/ or fonts/, try multiple Inter filename variants
+    fonts_dir = _fonts_dir()
+    semibold_path = _resolve_font(fonts_dir, SEMIBOLD_CANDIDATES)
+    regular_path = _resolve_font(fonts_dir, REGULAR_CANDIDATES)
+    if semibold_path is None and regular_path is not None:
+        semibold_path = regular_path  # avoid falling back to default; at least use Inter for both
+
+    name_font = fit_font(draw, name, semibold_path, style["text"]["name"]["size"], max_text_width, prefer_bold=True)
+    title_font = fit_font(draw, title, regular_path, style["text"]["title"]["size"], max_text_width, prefer_bold=False)
+
+    draw.text((text_x, name_y), name, font=name_font, fill=tuple(style["text"]["name"]["rgb"] + [style["text"]["name"]["alpha"]]))
+    draw.text((text_x, title_y), title, font=title_font, fill=tuple(style["text"]["title"]["rgb"] + [style["text"]["title"]["alpha"]]))
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(out_path)
+
+
+def slugify(s: str) -> str:
+    s = s.strip().lower()
+    s = re.sub(r"[^a-z0-9]+", "_", s).strip("_")
+    return s or "lowerthird"
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--name", help="Name line")
+    ap.add_argument("--title", help="Title line")
+    ap.add_argument("--out", help="Output png path (single render)")
+    ap.add_argument("--csv", help="CSV path with columns: name,title (batch render)")
+    ap.add_argument("--out_dir", default="out", help="Directory for batch output")
+    args = ap.parse_args()
+
+    style = load_style()
+
+    if args.csv:
+        csv_path = Path(args.csv)
+        if not csv_path.is_absolute() and not csv_path.exists():
+            csv_path = THIS_DIR / csv_path
+        out_dir = Path(args.out_dir)
+        if not csv_path.exists():
+            raise FileNotFoundError(csv_path)
+
+        with csv_path.open(newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            if not reader.fieldnames or "name" not in reader.fieldnames or "title" not in reader.fieldnames:
+                raise ValueError(f"CSV must have headers name,title. Found: {reader.fieldnames}")
+
+            for row in reader:
+                name = (row.get("name") or "").strip()
+                title = (row.get("title") or "").strip()
+                if not name or not title:
+                    continue
+
+                out_path = out_dir / f"lowerthird_{slugify(name)}.png"
+                render_lowerthird(name, title, out_path, style)
+
+        print(f"Done. Wrote PNGs to: {out_dir.resolve()}")
+        return
+
+    if not (args.name and args.title and args.out):
+        ap.error("Single render mode requires --name, --title, --out OR provide --csv for batch mode.")
+
+    render_lowerthird(args.name.strip(), args.title.strip(), Path(args.out), style)
+    print(f"Done. Wrote: {Path(args.out).resolve()}")
+
+
+if __name__ == "__main__":
+    main()

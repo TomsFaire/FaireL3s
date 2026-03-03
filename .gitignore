@@ -1,0 +1,22 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Local / private data (do not commit)
+people.csv
+org_chart_people.csv
+
+# Backups and OS
+*.bak
+.DS_Store
+
+# Output (generate locally)
+*.png
+out/
+Output/
