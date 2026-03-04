@@ -78,9 +78,32 @@ Jane Smith,Chief Executive Officer
 Alex Chen,Chief Technology Officer
 ```
 
+### Themes (Faire brand colorways)
+
+Use `--theme` to pick a colorway. All colors come from the Faire design language.
+
+| Theme | Description |
+|-------|-------------|
+| `default` | Light warm panel (#fbf8f6), dark text (#333 / #757575), tan accent (#b5a998). |
+| `dark` | Dark panel (#333333), white name and light gray title, warm tan accent. |
+| `dark_alt` | Near-black panel (#000000), white name and light gray title, tan accent. |
+| `bright` | Top Shop sage panel (#dde3d0), dark olive text, green accent. |
+| `bright_insider` | Insider pale teal (#f2f5f5), dark teal text (#154548), teal accent (#36676a). |
+| `bright_warm` | Warning cream (#f6efdb), amber text (#907c3a), gold accent. |
+| `bright_info` | Info blue-gray (#e2e7f0), slate text (#1b2834), gray accent (#7a7885). |
+
+**Examples:**
+
+```bash
+python3 generate_lowerthirds.py --name "Jane Smith" --title "Chief Executive Officer" --out output/jane_dark.png --theme dark
+python3 generate_lowerthirds.py --csv example_people.csv --out_dir output/ --theme bright
+```
+
+Batch output filenames get a theme suffix when not default (e.g. `lowerthird_jane_smith_dark.png`) so you can generate multiple themes into the same folder.
+
 ## Customization
 
-Edit `style.json` to change layout and colors: panel size, margins, text sizes, accent bar, etc.
+Edit `style.json` (or `style_dark.json`, `style_bright.json`, etc.) to change layout and colors: panel size, margins, text sizes, accent bar, etc.
 
 ## Output
 

@@ -104,10 +104,22 @@ def _system_font(for_bold: bool) -> Optional[Path]:
     return None
 
 
-def load_style() -> dict:
-    style_path = THIS_DIR / "style.json"
+THEME_FILES = {
+    "default": "style.json",
+    "dark": "style_dark.json",
+    "dark_alt": "style_dark_alt.json",
+    "bright": "style_bright.json",
+    "bright_insider": "style_bright_insider.json",
+    "bright_warm": "style_bright_warm.json",
+    "bright_info": "style_bright_info.json",
+}
+
+
+def load_style(theme: str = "default") -> dict:
+    filename = THEME_FILES.get(theme, THEME_FILES["default"])
+    style_path = THIS_DIR / filename
     if not style_path.exists():
-        raise FileNotFoundError(f"Missing style.json next to script: {style_path}")
+        raise FileNotFoundError(f"Missing {filename} next to script: {style_path}")
     return json.loads(style_path.read_text())
 
 
@@ -214,9 +226,11 @@ def main() -> None:
     ap.add_argument("--out", help="Output png path (single render)")
     ap.add_argument("--csv", help="CSV path with columns: name,title (batch render)")
     ap.add_argument("--out_dir", default="out", help="Directory for batch output")
+    ap.add_argument("--theme", choices=list(THEME_FILES), default="default",
+                    help="Colorway: default, dark, dark_alt, bright (sage), bright_insider (teal), bright_warm (amber), bright_info (slate)")
     args = ap.parse_args()
 
-    style = load_style()
+    style = load_style(args.theme)
 
     if args.csv:
         csv_path = Path(args.csv)
@@ -237,7 +251,10 @@ def main() -> None:
                 if not name or not title:
                     continue
 
-                out_path = out_dir / f"lowerthird_{slugify(name)}.png"
+                base = f"lowerthird_{slugify(name)}"
+                if args.theme != "default":
+                    base = f"{base}_{args.theme}"
+                out_path = out_dir / f"{base}.png"
                 render_lowerthird(name, title, out_path, style)
 
         print(f"Done. Wrote PNGs to: {out_dir.resolve()}")

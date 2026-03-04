@@ -21,6 +21,12 @@ org_chart_people.csv
 out/
 Output/
 
-# One sample lower third is committed as example
+# Example lower thirds (one per theme) are committed
 !output/
 !output/example_lowerthird.png
+!output/example_dark.png
+!output/example_dark_alt.png
+!output/example_bright.png
+!output/example_bright_insider.png
+!output/example_bright_warm.png
+!output/example_bright_info.png
