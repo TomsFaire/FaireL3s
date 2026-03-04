@@ -4,6 +4,8 @@
 
 Generate Faire-style lower-third graphics (1920×1080 transparent PNGs) for video. Name + title on a light panel with accent bar.
 
+![Example lower third](output/example_lowerthird.png)
+
 ## Requirements
 
 - Python 3.9+
@@ -85,3 +87,5 @@ Edit `style.json` to change layout and colors: panel size, margins, text sizes, 
 - **Size:** 1920×1080  
 - **Format:** PNG with transparency  
 - **Layout:** Lower-left panel, name (semi-bold) above title (regular)
+
+A sample lower third is included as **`output/example_lowerthird.png`** (Jane Smith, Chief Executive Officer) so you can see the result without running the script.

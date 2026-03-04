@@ -21,10 +21,9 @@ Fonts:
 
 If fonts aren't found, the script falls back to a system font.
 """
+from __future__ import annotations
 
 __version__ = "0.0.2"
-
-from __future__ import annotations
 
 import argparse
 import csv

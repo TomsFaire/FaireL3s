@@ -20,3 +20,7 @@ org_chart_people.csv
 *.png
 out/
 Output/
+
+# One sample lower third is committed as example
+!output/
+!output/example_lowerthird.png
