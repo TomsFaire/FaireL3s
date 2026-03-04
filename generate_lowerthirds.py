@@ -12,13 +12,17 @@ CSV format:
   Max Rhodes,Chief Executive Officer
   Thuan Pham,Chief Technology Officer
 
-Fonts (recommended):
-  Put Inter in font/ or fonts/ (any of these names work):
-    Inter-SemiBold.ttf or Inter-Bold.ttf  (for the name line)
-    Inter-Regular.ttf                     (for the title line)
+Fonts:
+  Easiest: download Inter from Google Fonts, unzip, and put the whole
+  unzipped folder next to this script as a directory named "Inter".
+  The script looks in Inter/ and Inter/static/ for the font files.
 
-If fonts aren't found, the script falls back to a default font.
+  Or put Inter-SemiBold.ttf and Inter-Regular.ttf in font/ or fonts/.
+
+If fonts aren't found, the script falls back to a system font.
 """
+
+__version__ = "0.0.2"
 
 from __future__ import annotations
 
@@ -33,25 +37,47 @@ from PIL import Image, ImageDraw, ImageFont
 
 THIS_DIR = Path(__file__).resolve().parent
 
-# Font folder: "font" or "fonts"
-def _fonts_dir() -> Path:
+# Font search order: "Inter" (unzip Google Fonts here), then "font", then "fonts"
+# Google Fonts zip has static/Inter_18pt-SemiBold.ttf, Inter_18pt-Regular.ttf, etc.
+SEMIBOLD_CANDIDATES = [
+    "Inter_18pt-SemiBold.ttf", "Inter_24pt-SemiBold.ttf", "Inter_28pt-SemiBold.ttf",
+    "Inter-SemiBold.ttf", "Inter-Bold.ttf", "InterSemiBold.ttf",
+]
+REGULAR_CANDIDATES = [
+    "Inter_18pt-Regular.ttf", "Inter_24pt-Regular.ttf", "Inter_28pt-Regular.ttf",
+    "Inter-Regular.ttf", "InterRegular.ttf",
+]
+
+
+def _font_search_dirs() -> list[Path]:
+    """Directories to search for font files, in order. Prefer Inter/ so users can unzip Google Fonts zip into Inter/."""
+    out: list[Path] = []
+    # Prefer Inter (any case) so unzipping Google Fonts into "Inter" works
+    for child in THIS_DIR.iterdir():
+        if child.is_dir() and child.name.lower() == "inter":
+            out.append(child)
+            static = child / "static"
+            if static.is_dir():
+                out.append(static)
+            return out
     for name in ("font", "fonts"):
         d = THIS_DIR / name
         if d.is_dir():
-            return d
-    return THIS_DIR / "fonts"  # default for mkdir later
+            out.append(d)
+            return out
+    out.append(THIS_DIR / "fonts")
+    return out
 
-# Inter name (bold) can be named differently across packages
-SEMIBOLD_CANDIDATES = ["Inter-SemiBold.ttf", "Inter-Bold.ttf", "InterSemiBold.ttf"]
-REGULAR_CANDIDATES = ["Inter-Regular.ttf", "InterRegular.ttf"]
 
-def _resolve_font(fonts_dir: Path, candidates: list[str]) -> Optional[Path]:
-    for name in candidates:
-        p = fonts_dir / name
-        if p.exists():
-            return p
-    if fonts_dir.exists():
-        lower_map = {f.name.lower(): f for f in fonts_dir.iterdir() if f.suffix.lower() == ".ttf"}
+def _resolve_font(search_dirs: list[Path], candidates: list[str]) -> Optional[Path]:
+    for d in search_dirs:
+        if not d.exists():
+            continue
+        for name in candidates:
+            p = d / name
+            if p.exists():
+                return p
+        lower_map = {f.name.lower(): f for f in d.iterdir() if f.suffix.lower() == ".ttf"}
         for name in candidates:
             if name.lower() in lower_map:
                 return lower_map[name.lower()]
@@ -159,10 +185,10 @@ def render_lowerthird(name: str, title: str, out_path: Path, style: dict) -> Non
     title_y = panel_y + style["text"]["title_y"]
     max_text_width = panel_x + panel_w - style["panel"]["padding_right"] - text_x
 
-    # Fonts: look in font/ or fonts/, try multiple Inter filename variants
-    fonts_dir = _fonts_dir()
-    semibold_path = _resolve_font(fonts_dir, SEMIBOLD_CANDIDATES)
-    regular_path = _resolve_font(fonts_dir, REGULAR_CANDIDATES)
+    # Fonts: look in Inter/ (and Inter/static/), then font/ or fonts/
+    search_dirs = _font_search_dirs()
+    semibold_path = _resolve_font(search_dirs, SEMIBOLD_CANDIDATES)
+    regular_path = _resolve_font(search_dirs, REGULAR_CANDIDATES)
     if semibold_path is None and regular_path is not None:
         semibold_path = regular_path  # avoid falling back to default; at least use Inter for both
 
