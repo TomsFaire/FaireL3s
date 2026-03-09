@@ -13,58 +13,75 @@ CSV format:
   Thuan Pham,Chief Technology Officer
 
 Fonts:
-  Easiest: download Inter from Google Fonts, unzip, and put the whole
-  unzipped folder next to this script as a directory named "Inter".
-  The script looks in Inter/ and Inter/static/ for the font files.
-
-  Or put Inter-SemiBold.ttf and Inter-Regular.ttf in font/ or fonts/.
-
-If fonts aren't found, the script falls back to a system font.
+  Faire uses Graphik (sans) for UI; this script uses Graphik for name + title.
+  If you have Graphik: put Graphik-SemiBold.ttf (or Medium) and Graphik-Regular.ttf
+  in font/ or fonts/. Otherwise use Inter (unzip Google Fonts "Inter" folder
+  here, or put Inter-SemiBold.ttf and Inter-Regular.ttf in font/ or fonts/).
+  Falls back to system font if none found.
 """
 from __future__ import annotations
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 import argparse
 import csv
 import json
 import re
+import urllib.request
 from pathlib import Path
 from typing import Optional, Tuple
+
+# Faire CDN (internal use): Graphik fonts for lower thirds
+FAIRE_GRAPHIK_FONTS = [
+    ("https://cdn.faire.com/static/fonts/GraphikRegular.otf", "Graphik-Regular.otf"),
+    ("https://cdn.faire.com/static/fonts/GraphikMedium.otf", "Graphik-Medium.otf"),
+    ("https://cdn.faire.com/static/fonts/GraphikSemiBold.otf", "Graphik-SemiBold.otf"),
+]
 
 from PIL import Image, ImageDraw, ImageFont
 
 THIS_DIR = Path(__file__).resolve().parent
 
-# Font search order: "Inter" (unzip Google Fonts here), then "font", then "fonts"
-# Google Fonts zip has static/Inter_18pt-SemiBold.ttf, Inter_18pt-Regular.ttf, etc.
+# Faire brand typeface: Graphik (sans) for UI. Fallback: Inter. iOS bundles Graphik + Nantes.
 SEMIBOLD_CANDIDATES = [
+    "Graphik-SemiBold.ttf", "Graphik-SemiBold.otf", "Graphik-Medium.ttf", "Graphik-Medium.otf",
     "Inter_18pt-SemiBold.ttf", "Inter_24pt-SemiBold.ttf", "Inter_28pt-SemiBold.ttf",
     "Inter-SemiBold.ttf", "Inter-Bold.ttf", "InterSemiBold.ttf",
 ]
 REGULAR_CANDIDATES = [
+    "Graphik-Regular.ttf", "Graphik-Regular.otf",
     "Inter_18pt-Regular.ttf", "Inter_24pt-Regular.ttf", "Inter_28pt-Regular.ttf",
     "Inter-Regular.ttf", "InterRegular.ttf",
 ]
 
 
 def _font_search_dirs() -> list[Path]:
-    """Directories to search for font files, in order. Prefer Inter/ so users can unzip Google Fonts zip into Inter/."""
+    """Directories to search for font files. Order: Graphik folder, font/fonts, Inter folder."""
     out: list[Path] = []
-    # Prefer Inter (any case) so unzipping Google Fonts into "Inter" works
+    for child in THIS_DIR.iterdir():
+        if not child.is_dir():
+            continue
+        name_lower = child.name.lower()
+        if name_lower == "graphik":
+            out.append(child)
+            static = child / "static"
+            if static.is_dir():
+                out.append(static)
+            break
+    for name in ("font", "fonts"):
+        d = THIS_DIR / name
+        if d.is_dir():
+            out.append(d)
+            break
     for child in THIS_DIR.iterdir():
         if child.is_dir() and child.name.lower() == "inter":
             out.append(child)
             static = child / "static"
             if static.is_dir():
                 out.append(static)
-            return out
-    for name in ("font", "fonts"):
-        d = THIS_DIR / name
-        if d.is_dir():
-            out.append(d)
-            return out
-    out.append(THIS_DIR / "fonts")
+            break
+    if not out:
+        out.append(THIS_DIR / "fonts")
     return out
 
 
@@ -76,7 +93,7 @@ def _resolve_font(search_dirs: list[Path], candidates: list[str]) -> Optional[Pa
             p = d / name
             if p.exists():
                 return p
-        lower_map = {f.name.lower(): f for f in d.iterdir() if f.suffix.lower() == ".ttf"}
+        lower_map = {f.name.lower(): f for f in d.iterdir() if f.suffix.lower() in (".ttf", ".otf")}
         for name in candidates:
             if name.lower() in lower_map:
                 return lower_map[name.lower()]
@@ -219,6 +236,21 @@ def slugify(s: str) -> str:
     return s or "lowerthird"
 
 
+def fetch_faire_fonts() -> Path:
+    """Download Graphik from Faire CDN into font/. For internal use."""
+    d = THIS_DIR / "font"
+    d.mkdir(exist_ok=True)
+    for url, filename in FAIRE_GRAPHIK_FONTS:
+        path = d / filename
+        try:
+            urllib.request.urlretrieve(url, path)
+            print(f"  {filename}")
+        except Exception as e:
+            print(f"  {filename}: failed ({e})")
+    print(f"Graphik fonts saved to: {d.resolve()}")
+    return d
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", help="Name line")
@@ -228,7 +260,14 @@ def main() -> None:
     ap.add_argument("--out_dir", default="out", help="Directory for batch output")
     ap.add_argument("--theme", choices=list(THEME_FILES), default="default",
                     help="Colorway: default, dark, dark_alt, bright (sage), bright_insider (teal), bright_warm (amber), bright_info (slate)")
+    ap.add_argument("--fetch-fonts", action="store_true",
+                    help="Download Graphik from Faire CDN into font/ (internal use). Then exit.")
     args = ap.parse_args()
+
+    if args.fetch_fonts:
+        print("Fetching Graphik from Faire CDN...")
+        fetch_faire_fonts()
+        return
 
     style = load_style(args.theme)
 

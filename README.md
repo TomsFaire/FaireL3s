@@ -1,10 +1,10 @@
 # FaireL3s
 
-**v0.0.2**
+**v0.0.3**
 
 Generate Faire-style lower-third graphics (1920×1080 transparent PNGs) for video. Name + title on a light panel with accent bar.
 
-## Pick a style (for producers)
+## Pick a style 
 
 Use the theme name with `--theme` when you run the script (e.g. `--theme dark`).
 
@@ -25,42 +25,55 @@ Use the theme name with `--theme` when you run the script (e.g. `--theme dark`).
 
 ## Fonts (required for correct look)
 
-**This repo does not include font files.** You must add Inter yourself; without it the script uses a system fallback and the lower thirds will not match the intended style.
+Faire uses two core brand typefaces:
 
-### Easiest: unzip Google Fonts into an `Inter` folder
+- **Graphik** (sans-serif) for most product UI and general readability.<sup>[1]</sup>
+- **Nantes** (serif) for “brand voice” moments (e.g. marketing).<sup>[2]</sup>
 
-1. Download **[Inter from Google Fonts](https://fonts.google.com/specimen/Inter)** → click “Download family”.
-2. Unzip the archive.
-3. Rename the unzipped folder to **`Inter`** (if it isn’t already) and move it into this repo so it sits next to `generate_lowerthirds.py`.
+This script uses **Graphik** for both the name and title lines (SemiBold/Medium for the name, Regular for the title). The iOS codebase bundles Graphik (Regular, Medium, SemiBold) and Nantes (Regular, SemiBold).<sup>[3]</sup>
 
-Resulting layout (Google Fonts zip has a `static/` subfolder with the fonts):
+**This repo does not include font files.** Use one of the options below.
 
-```
-FaireL3s/
-  Inter/
-    static/
-      Inter_18pt-SemiBold.ttf
-      Inter_18pt-Regular.ttf
-      ... (other weights)
-    OFL.txt
-    ...
-  generate_lowerthirds.py
-  style.json
-  ...
+### Option A: Brand fonts (Graphik) — internal
+
+Faire hosts Graphik on the CDN for internal use.<sup>[4]</sup> You can pull the fonts automatically so the script uses the real brand typeface.
+
+**Step 1 — Fetch the fonts**
+
+From the repo directory (where `generate_lowerthirds.py` lives), run:
+
+```bash
+python3 generate_lowerthirds.py --fetch-fonts
 ```
 
-The script looks in `Inter/` and `Inter/static/` for the font files. No need to copy or rename individual files.
+This step:
 
-### Alternative: use `font/` or `fonts/`
+- Downloads three font files from **cdn.faire.com** (Graphik Regular, Medium, SemiBold)
+- Saves them into the **`font/`** folder as `Graphik-Regular.otf`, `Graphik-Medium.otf`, `Graphik-SemiBold.otf`
+- Requires **network access** (and works only from environments that can reach Faire’s CDN)
 
-If you prefer, put only the two needed files in a folder named **`font/`** or **`fonts/`** next to the script:
+The CDN may require you to be on Faire’s network or VPN; if the download fails (e.g. 403 or connection error), try from a Faire-connected machine or use [Option B](#option-b-inter-substitute-for-graphik) (Inter) instead. No separate login or credentials are used—access is typically governed by network/VPN.
 
-- Name line (bold): `Inter-SemiBold.ttf` or `Inter-Bold.ttf`
+You only need to run `--fetch-fonts` once per machine (or after deleting `font/`). The script does not generate any lower thirds in this step; it only downloads the fonts and then exits.
+
+**Step 2 — Generate lower thirds**
+
+After the fonts are in `font/`, run the script as usual (see [Usage](#usage)). It will use Graphik automatically.
+
+If you already have the Graphik files from another source, put them in **`font/`** or **`fonts/`** with the same names; no need to run `--fetch-fonts`.
+
+### Option B: Inter (substitute for Graphik)
+
+Inter is a good stand-in for Graphik. Easiest: download **[Inter from Google Fonts](https://fonts.google.com/specimen/Inter)** → “Download family”, unzip, and put the unzipped folder next to the script as **`Inter`**. The script looks in `Inter/` and `Inter/static/` for the font files.
+
+Or put only the two needed files in **`font/`** or **`fonts/`**:
+
+- Name line: `Inter-SemiBold.ttf` or `Inter-Bold.ttf`
 - Title line: `Inter-Regular.ttf`
 
 ### Verify
 
-Run a single lower third. If the name is bold and the title is regular in Inter, fonts are set up correctly:
+Run a single lower third. If the name is bold and the title is regular, fonts are set up correctly:
 
 ```bash
 python3 generate_lowerthirds.py --name "Your Name" --title "Your Title" --out output/test.png
@@ -114,3 +127,10 @@ Edit `style.json` (or `style_dark.json`, `style_bright.json`, etc.) to change la
 - **Layout:** Lower-left panel, name (semi-bold) above title (regular)
 
 A sample lower third is included as **`output/example_lowerthird.png`** (Jane Smith, Chief Executive Officer) so you can see the result without running the script.
+
+---
+
+<sup>[1]</sup> [Faire Slack – Graphik](https://faire-wholesale.slack.com/archives/CC5448WAG/p1759868613384409)  
+<sup>[2]</sup> [Faire Slack – Nantes](https://faire-wholesale.slack.com/archives/C07QYV5FQET/p1731709269836909)  
+<sup>[3]</sup> [Faire iOS – UIFont+Faire](https://github.com/Faire/ios/blob/main/Modules/ViewCore/Sources/Extensions/UIFont+Faire.swift)  
+<sup>[4]</sup> [Faire Slack – CDN fonts](https://faire-wholesale.slack.com/archives/C08H6DAB5TM/p1747315159424589) (Graphik on cdn.faire.com)
