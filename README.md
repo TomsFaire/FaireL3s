@@ -17,6 +17,12 @@ Use the theme name with `--theme` when you run the script (e.g. `--theme dark`).
 | **Bright Insider** (teal) | `bright_insider` | ![Bright Insider](output/example_bright_insider.png) |
 | **Bright Warm** (amber) | `bright_warm` | ![Bright Warm](output/example_bright_warm.png) |
 | **Bright Info** (slate blue-gray) | `bright_info` | ![Bright Info](output/example_bright_info.png) |
+| **Palette Olive** (mustard/olive) | `palette_olive` | ![Palette Olive](output/example_palette_olive.png) |
+| **Palette Teal** (blue-green) | `palette_teal` | ![Palette Teal](output/example_palette_teal.png) |
+| **Palette Terracotta** (dusty rose/terracotta) | `palette_terracotta` | ![Palette Terracotta](output/example_palette_terracotta.png) |
+| **Palette Plum** (lavender/plum) | `palette_plum` | ![Palette Plum](output/example_palette_plum.png) |
+| **Palette Copper** (warm orange/copper) | `palette_copper` | ![Palette Copper](output/example_palette_copper.png) |
+| **Palette Sage** (cool sage green) | `palette_sage` | ![Palette Sage](output/example_palette_sage.png) |
 
 ## Requirements
 
@@ -127,6 +133,57 @@ Edit `style.json` (or `style_dark.json`, `style_bright.json`, etc.) to change la
 - **Layout:** Lower-left panel, name (semi-bold) above title (regular)
 
 A sample lower third is included as **`output/example_lowerthird.png`** (Jane Smith, Chief Executive Officer) so you can see the result without running the script.
+
+## Bitfocus Companion: button previews (png64)
+
+If you use **Bitfocus Companion** with buttons that fire lower thirds from the media pool, you can fill each button’s background with a thumbnail of the corresponding L3 image (base64).
+
+**One-time setup:** install PyYAML in the same environment as the main script (`pip install pyyaml`).
+
+**Run:**
+
+```bash
+python3 companion_png64.py path/to/your_page.companionconfig path/to/folder/of/l3/pngs [--out path/to/output.companionconfig]
+```
+
+- The script finds every button on the page that has a **mediaPlayerSource** (media pool) action.
+- It assigns PNGs from the folder to those buttons in **row/column order**. PNG order is **alphabetical by filename**—e.g. name files `01_max.png`, `02_jen.png` so the order matches your buttons.
+- Each image is resized to a small thumbnail (default 72×72; use `--size 96` if needed), encoded as base64, and written into `style.png64` for each button.
+- Import the **output** config (or overwrite the original; the script can back it up as `.bak`) into Companion so the buttons show the L3 previews.
+
+Example (output to a new file so you don’t overwrite the original):
+
+```bash
+python3 companion_png64.py ~/Downloads/zoom_page5.companionconfig "/Users/tom/Documents/Lower 3rds/Output" --out ~/Downloads/zoom_page5_with_previews.companionconfig
+```
+
+### Pre-built page: 16 L3 buttons (5/0/1–5/0/8, 5/1/1–5/1/8)
+
+For a **clean page** with exactly 16 buttons that map to media pool slots 40–55, use **`companion_l3_page.py`**:
+
+- **Positions:** Page 5, row 0 columns 1–8, row 1 columns 1–8 (16 buttons).
+- **Each button:** Label = name derived from the PNG filename (e.g. `lowerthird_jen_burke.png` → “Jen Burke”), background = base64 thumbnail of that PNG, media pool source = 40, 41, … 55.
+- You supply a **template** page (any existing Companion page that has one L3-style button with `mediaPlayerSource`); the script clones that button’s action structure and fills in label, png64, and source index.
+
+**Full workflow (generate L3s from CSV, then build the Companion page):**
+
+```bash
+# 1. Generate lower thirds into your Output folder (e.g. from a CSV)
+python3 generate_lowerthirds.py --csv people.csv --out_dir "/Users/tom/Documents/Lower 3rds/Output"
+
+# 2. Build the Companion page (PNGs from that folder; alphabetical order = button order)
+python3 companion_l3_page.py --template path/to/your_existing_page5.companionconfig --png-dir "/Users/tom/Documents/Lower 3rds/Output" --out path/to/page5_l3.companionconfig
+```
+
+Then import **`page5_l3.companionconfig`** into Companion (replace or add page 5). Button names and thumbnails will match your files; media pool indices start at 40.
+
+**Optional — ATEM media pool upload:**  
+The script does **not** upload to the ATEM by default. Blackmagic doesn’t expose a simple REST API for still upload; options:
+
+- **PyATEMAPI** ([GitHub](https://github.com/mackenly/PyATEMAPI)): run its server against your ATEM IP, then use its HTTP API to upload stills if supported.
+- **atemlib MediaUpload** (e.g. `MediaUpload.exe [atem-ip] [slot] [filename]`): run this per PNG (e.g. in a small script loop) to push files into the media pool before or after generating the Companion page.
+
+If you run an upload tool separately, use the same PNG order (alphabetical) and slots 40–55 so the Companion buttons stay in sync.
 
 ---
 

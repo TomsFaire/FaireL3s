@@ -1,0 +1,31 @@
+{
+  "canvas": { "width": 1920, "height": 1080 },
+  "margins": { "left": 96, "bottom": 96 },
+  "panel": {
+    "width": 861,
+    "height": 169,
+    "radius": 4,
+    "fill_rgba": [248, 238, 232, 255],
+    "border_rgb": [195, 165, 155],
+    "border_alpha": 255,
+    "border_width": 1,
+    "padding_left": 24,
+    "padding_right": 32,
+    "padding_y": 32
+  },
+  "accent_bar": {
+    "x": 24,
+    "y": 32,
+    "width": 5,
+    "height": 104,
+    "rgb": [165, 95, 85],
+    "alpha": 255
+  },
+  "text": {
+    "name": { "size": 52, "rgb": [85, 55, 52], "alpha": 255 },
+    "title": { "size": 32, "rgb": [130, 85, 80], "alpha": 230 },
+    "gap_x_after_bar": 16,
+    "name_y": 50,
+    "title_y": 105
+  }
+}

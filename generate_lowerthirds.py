@@ -129,6 +129,12 @@ THEME_FILES = {
     "bright_insider": "style_bright_insider.json",
     "bright_warm": "style_bright_warm.json",
     "bright_info": "style_bright_info.json",
+    "palette_olive": "style_palette_olive.json",
+    "palette_teal": "style_palette_teal.json",
+    "palette_terracotta": "style_palette_terracotta.json",
+    "palette_plum": "style_palette_plum.json",
+    "palette_copper": "style_palette_copper.json",
+    "palette_sage": "style_palette_sage.json",
 }
 
 

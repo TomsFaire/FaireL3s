@@ -11,6 +11,7 @@ __pycache__/
 # Local / private data (do not commit)
 people.csv
 org_chart_people.csv
+plan.md
 
 # Backups and OS
 *.bak
@@ -30,3 +31,9 @@ Output/
 !output/example_bright_insider.png
 !output/example_bright_warm.png
 !output/example_bright_info.png
+!output/example_palette_olive.png
+!output/example_palette_teal.png
+!output/example_palette_terracotta.png
+!output/example_palette_plum.png
+!output/example_palette_copper.png
+!output/example_palette_sage.png
