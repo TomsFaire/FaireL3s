@@ -7,6 +7,9 @@ Single render:
 Batch from CSV:
   python generate_lowerthirds.py --csv people.csv --out_dir out/
 
+Batch + Companion page (one command):
+  python generate_lowerthirds.py --csv people.csv --out_dir output/ --companion
+
 CSV format:
   name,title
   Max Rhodes,Chief Executive Officer
@@ -27,6 +30,8 @@ import argparse
 import csv
 import json
 import re
+import subprocess
+import sys
 import urllib.request
 from pathlib import Path
 from typing import Optional, Tuple
@@ -268,6 +273,10 @@ def main() -> None:
                     help="Colorway: default, dark, dark_alt, bright (sage), bright_insider (teal), bright_warm (amber), bright_info (slate)")
     ap.add_argument("--fetch-fonts", action="store_true",
                     help="Download Graphik from Faire CDN into font/ (internal use). Then exit.")
+    ap.add_argument("--companion", action="store_true",
+                    help="After batch from CSV, run companion_l3_page to write page6_l3.companionconfig into out_dir (one-step deploy).")
+    ap.add_argument("--companion-template", type=Path, default=None,
+                    help="Companion template path for --companion (default: template_page6_l3.companionconfig next to script).")
     args = ap.parse_args()
 
     if args.fetch_fonts:
@@ -303,6 +312,28 @@ def main() -> None:
                 render_lowerthird(name, title, out_path, style)
 
         print(f"Done. Wrote PNGs to: {out_dir.resolve()}")
+
+        if args.companion:
+            companion_script = THIS_DIR / "companion_l3_page.py"
+            if not companion_script.exists():
+                raise FileNotFoundError(f"Companion script not found: {companion_script}. Run companion_l3_page.py separately.")
+            template = args.companion_template or (THIS_DIR / "template_page6_l3.companionconfig")
+            template = template.resolve()
+            if not template.exists():
+                raise FileNotFoundError(f"Companion template not found: {template}")
+            out_dir.mkdir(parents=True, exist_ok=True)
+            csv_path = csv_path.resolve()
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(companion_script),
+                    "--template", str(template),
+                    "--csv", str(csv_path),
+                    "--png-dir", str(out_dir.resolve()),
+                ],
+                check=True,
+            )
+            print(f"Companion config written to {out_dir.resolve() / 'page6_l3.companionconfig'}")
         return
 
     if not (args.name and args.title and args.out):

@@ -112,13 +112,21 @@ Fonts must be present in `font/` (or `fonts/`) for correct rendering; see [Optio
 
 ## Usage
 
+**Deploy from CSV (default):** one command generates PNGs and the Companion page config into the same folder. Use this for events:
+
+```bash
+python3 generate_lowerthirds.py --csv people.csv --out_dir output/ --companion
+```
+
+Add `--theme palette_teal` (or another theme) if you want. Then upload the PNGs to ATEM slots 40–55 and import `output/page6_l3.companionconfig` into Companion.
+
 **One lower third:**
 
 ```bash
 python3 generate_lowerthirds.py --name "Jane Smith" --title "Chief Executive Officer" --out output/lowerthird_jane_smith.png
 ```
 
-**Batch from CSV:**
+**Batch from CSV only (no Companion):**
 
 ```bash
 python3 generate_lowerthirds.py --csv example_people.csv --out_dir output/
@@ -192,19 +200,20 @@ python3 companion_png64.py ~/Downloads/zoom_page5.companionconfig "/Users/tom/Do
 
 **Full workflow (CSV → PNGs → Companion page)**
 
-1. **CSV** — `name,title` header; use `--theme` on the generator if you want (e.g. `palette_teal`).
-2. **Generate L3 PNGs** — One folder for PNGs, Companion config, and (later) ATEM upload.
-3. **Build Companion page** — Same folder as `--png-dir`; use `--csv` so button order = CSV row order. Config is written into that folder as `page6_l3.companionconfig` (use `--out` to override).
-4. **Upload to ATEM** — Same PNGs into slots 40–55 in the same order.
-5. **Import in Companion** — Import `page6_l3.companionconfig` from that folder.
+Use the one-command deploy (see [Usage](#usage) above):
 
 ```bash
-# From the repo directory (activate venv first: source .venv/bin/activate)
+python3 generate_lowerthirds.py --csv people.csv --out_dir output/ --companion
+```
+
+That writes all PNGs and `page6_l3.companionconfig` into the same folder. Upload the PNGs to ATEM slots 40–55 in the same order, then import the config into Companion.
+
+**Two steps (optional):** if you prefer to run the generator and Companion script separately:
+
+```bash
 python3 generate_lowerthirds.py --csv people.csv --out_dir output/
 python3 companion_l3_page.py --template template_page6_l3.companionconfig --csv people.csv --png-dir output/
 ```
-
-PNGs and `output/page6_l3.companionconfig` end up in `output/`. Replace `output/` with your path (e.g. `"/Users/tom/Documents/Lower 3rds/Output"`) if you use a different folder.
 
 ### Quick test guide: Companion
 

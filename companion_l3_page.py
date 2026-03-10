@@ -83,15 +83,25 @@ def _set_media_source(actions: list[dict], source: int) -> None:
                 _set_media_source(children, source)
 
 
-def _set_button_label(actions: list[dict], label: str) -> None:
-    """In-place: set button_text label in actions and else_actions (restore label)."""
+def _set_button_label(actions: list[dict], label: str, only_last_in_list: bool = False) -> None:
+    """In-place: set button_text label. In else_actions the first button_text is 'Too fast, try again!' (leave it); only the last one (restore) gets the label."""
+    if only_last_in_list:
+        indices = [i for i, a in enumerate(actions) if a.get("definitionId") == "button_text"]
+        if indices:
+            actions[indices[-1]].setdefault("options", {})["label"] = label
+        for a in actions:
+            for key in ("actions", "else_actions"):
+                children = (a.get("children") or {}).get(key)
+                if isinstance(children, list):
+                    _set_button_label(children, label, only_last_in_list=(key == "else_actions"))
+        return
     for a in actions:
         if a.get("definitionId") == "button_text":
             a.setdefault("options", {})["label"] = label
         for key in ("actions", "else_actions"):
             children = (a.get("children") or {}).get(key)
             if isinstance(children, list):
-                _set_button_label(children, label)
+                _set_button_label(children, label, only_last_in_list=(key == "else_actions"))
 
 
 def filename_to_label(filename: str) -> str:

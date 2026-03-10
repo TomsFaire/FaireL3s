@@ -308,7 +308,7 @@
 													"definitionId": "button_text",
 													"connectionId": "internal",
 													"options": {
-														"label": "L3\nDan Hockenmaier Palette Teal",
+														"label": "Too fast, try again!",
 														"location_target": "this",
 														"location_text": "$(this:page)/$(this:row)/$(this:column)",
 														"location_expression": "concat($(this:page), '/', $(this:row), '/', $(this:column))"
