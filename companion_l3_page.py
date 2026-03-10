@@ -12,6 +12,7 @@ import argparse
 import base64
 import copy
 import csv
+import gzip
 import io
 import json
 import random
@@ -228,27 +229,46 @@ def get_template_button(data: dict) -> Optional[dict]:
 # Match location_text that is a single page/row/col (e.g. "5/2/1") so we can make it page-agnostic.
 _LOCATION_PAGE_ROW_COL_RE = re.compile(r"^(\d+)/(\d+)/(\d+)$")
 
+# Reference/non-L3 buttons: do not change their location_text/location_expression (leave template as-is).
+# Row 0 cols 8–16, row 1 cols 8–16, row 2 col 8, row 3 cols 4–8.
+_PROTECTED_BUTTON_POSITIONS: frozenset[tuple[str, str]] = frozenset(
+    [("0", str(c)) for c in range(8, 17)]
+    + [("1", str(c)) for c in range(8, 17)]
+    + [("2", "8")]
+    + [("3", str(c)) for c in range(4, 9)]
+)
 
-def _fix_page_references(obj: Any) -> None:
-    """In-place: replace hardcoded page/row/col (e.g. 5/2/1) with expression so it works on any page."""
+
+def _fix_page_references(obj: Any, _path: tuple[Any, ...] = (), _skip_buttons: frozenset[tuple[str, str]] | None = None) -> None:
+    """In-place: replace hardcoded page/row/col with expression for any-page. Skip buttons at protected positions."""
+    if _skip_buttons is None:
+        _skip_buttons = _PROTECTED_BUTTON_POSITIONS
+    # If we're inside page.controls[row][col], path starts with ("page","controls",row,col,...)
+    current_button: tuple[str, str] | None = None
+    if len(_path) >= 4 and _path[0] == "page" and _path[1] == "controls":
+        current_button = (str(_path[2]), str(_path[3]))
     if isinstance(obj, dict):
         opts = obj.get("options") or {}
         loc_text = (opts.get("location_text") or "").strip()
-        if isinstance(loc_text, str):
+        if isinstance(loc_text, str) and (current_button is None or current_button not in _skip_buttons):
             m = _LOCATION_PAGE_ROW_COL_RE.match(loc_text)
             if m:
                 _page, row, col = m.groups()
                 opts["location_expression"] = f"concat($(this:page), '/', '{row}', '/', '{col}')"
-        for v in obj.values():
-            _fix_page_references(v)
+        for k, v in obj.items():
+            _fix_page_references(v, _path + (k,), _skip_buttons)
     elif isinstance(obj, list):
-        for v in obj:
-            _fix_page_references(v)
+        for i, v in enumerate(obj):
+            _fix_page_references(v, _path + (i,), _skip_buttons)
 
 
 def _load_template(template_path: Path) -> dict:
-    """Load template from JSON or YAML. Companion exports JSON (tabs); YAML disallows tabs."""
-    raw = template_path.read_text(encoding="utf-8")
+    """Load template from JSON or YAML. Handles gzip-compressed export (Companion sometimes exports .companionconfig as gzip)."""
+    raw_bytes = template_path.read_bytes()
+    if raw_bytes[:2] == b"\x1f\x8b":
+        raw = gzip.decompress(raw_bytes).decode("utf-8")
+    else:
+        raw = raw_bytes.decode("utf-8")
     if raw.lstrip().startswith("{"):
         return json.loads(raw)
     return yaml.safe_load(raw)
@@ -276,7 +296,8 @@ def build_page(
 
     for i in range(n):
         row, col = L3_BUTTON_LAYOUT[i]
-        source_id = media_start + i
+        # ATEM media pool source is 0-based; slot N in UI = index N-1
+        source_id = (media_start + i) - 1
         label = labels[i] if i < len(labels) else filename_to_display_name(png_paths[i].name)
         # Button text: leading newline, then L3, then newline, then name (no theme)
         button_text = f"\nL3\n{label}"
