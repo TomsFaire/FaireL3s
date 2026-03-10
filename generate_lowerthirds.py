@@ -274,9 +274,11 @@ def main() -> None:
     ap.add_argument("--fetch-fonts", action="store_true",
                     help="Download Graphik from Faire CDN into font/ (internal use). Then exit.")
     ap.add_argument("--companion", action="store_true",
-                    help="After batch from CSV, run companion_l3_page to write page6_l3.companionconfig into out_dir (one-step deploy).")
+                    help="After batch from CSV, run companion_l3_page to write l3.companionconfig into out_dir (one-step deploy).")
     ap.add_argument("--companion-template", type=Path, default=None,
-                    help="Companion template path for --companion (default: template_page6_l3.companionconfig next to script).")
+                    help="Companion template path for --companion (default: template_l3.companionconfig next to script).")
+    ap.add_argument("--media-start", type=int, default=35,
+                    help="First media pool slot (default 35). When batching from CSV, filenames are prefixed with slot number so Finder order matches CSV/upload order.")
     args = ap.parse_args()
 
     if args.fetch_fonts:
@@ -294,22 +296,26 @@ def main() -> None:
         if not csv_path.exists():
             raise FileNotFoundError(csv_path)
 
+        media_start = getattr(args, "media_start", 35)
         with csv_path.open(newline="", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             if not reader.fieldnames or "name" not in reader.fieldnames or "title" not in reader.fieldnames:
                 raise ValueError(f"CSV must have headers name,title. Found: {reader.fieldnames}")
 
+            index = 0
             for row in reader:
                 name = (row.get("name") or "").strip()
                 title = (row.get("title") or "").strip()
                 if not name or not title:
                     continue
 
-                base = f"lowerthird_{slugify(name)}"
+                slot = media_start + index
+                base = f"{slot}_lowerthird_{slugify(name)}"
                 if args.theme != "default":
                     base = f"{base}_{args.theme}"
                 out_path = out_dir / f"{base}.png"
                 render_lowerthird(name, title, out_path, style)
+                index += 1
 
         print(f"Done. Wrote PNGs to: {out_dir.resolve()}")
 
@@ -317,7 +323,7 @@ def main() -> None:
             companion_script = THIS_DIR / "companion_l3_page.py"
             if not companion_script.exists():
                 raise FileNotFoundError(f"Companion script not found: {companion_script}. Run companion_l3_page.py separately.")
-            template = args.companion_template or (THIS_DIR / "template_page6_l3.companionconfig")
+            template = args.companion_template or (THIS_DIR / "template_l3.companionconfig")
             template = template.resolve()
             if not template.exists():
                 raise FileNotFoundError(f"Companion template not found: {template}")
@@ -330,10 +336,11 @@ def main() -> None:
                     "--template", str(template),
                     "--csv", str(csv_path),
                     "--png-dir", str(out_dir.resolve()),
+                    "--media-start", str(media_start),
                 ],
                 check=True,
             )
-            print(f"Companion config written to {out_dir.resolve() / 'page6_l3.companionconfig'}")
+            print(f"Companion config written to {out_dir.resolve() / 'l3.companionconfig'}")
         return
 
     if not (args.name and args.title and args.out):

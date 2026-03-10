@@ -33,16 +33,16 @@ Use the theme name with `--theme` when you run the script (e.g. `--theme dark`).
 
 Faire uses two core brand typefaces:
 
-- **Graphik** (sans-serif) for most product UI and general readability.<sup>[1]</sup>
-- **Nantes** (serif) for “brand voice” moments (e.g. marketing).<sup>[2]</sup>
+- **Graphik** (sans-serif) for most product UI and general readability.
+- **Nantes** (serif) for “brand voice” moments (e.g. marketing).
 
-This script uses **Graphik** for both the name and title lines (SemiBold/Medium for the name, Regular for the title). The iOS codebase bundles Graphik (Regular, Medium, SemiBold) and Nantes (Regular, SemiBold).<sup>[3]</sup>
+This script uses **Graphik** for both the name and title lines (SemiBold/Medium for the name, Regular for the title). The iOS codebase bundles Graphik (Regular, Medium, SemiBold) and Nantes (Regular, SemiBold).
 
 **This repo does not include font files.** Use one of the options below.
 
 ### Option A: Brand fonts (Graphik) — internal
 
-Faire hosts Graphik on the CDN for internal use.<sup>[4]</sup> You can pull the fonts automatically so the script uses the real brand typeface.
+Faire hosts Graphik on the CDN for internal use. You can pull the fonts automatically so the script uses the real brand typeface.
 
 **Step 1 — Fetch the fonts**
 
@@ -118,7 +118,7 @@ Fonts must be present in `font/` (or `fonts/`) for correct rendering; see [Optio
 python3 generate_lowerthirds.py --csv people.csv --out_dir output/ --companion
 ```
 
-Add `--theme palette_teal` (or another theme) if you want. Then upload the PNGs to ATEM slots 40–65 (up to 26) and import `output/page6_l3.companionconfig` into Companion.
+Add `--theme palette_teal` (or another theme) if you want. Then upload the PNGs to ATEM slots 35–60 (up to 26; pool ends at 60) and import `output/l3.companionconfig` into Companion (assign to any page; references use expressions so it works wherever you import it).
 
 **One lower third:**
 
@@ -192,11 +192,11 @@ python3 companion_png64.py ~/Downloads/zoom_page5.companionconfig "/Users/tom/Do
 
 ### Pre-built page: up to 26 L3 buttons
 
-**`companion_l3_page.py`** builds a Companion page with up to **26** L3 buttons. Layout: row 0 cols 1–8, row 1 cols 1–8, row 2 cols 1–7, row 3 cols 1–3 (fits Stream Deck Studio and 32-button with reference buttons). Media pool slots 40–65. The repo includes **`template_page6_l3.companionconfig`** (page 6 “Lower 3rds” with this grid plus BAIL, Bug Me, HOME, and reference buttons); the script overwrites only the L3 positions and keeps the rest.
+**`companion_l3_page.py`** builds a Companion page with up to **26** L3 buttons. Layout: row 0 cols 1–8, row 1 cols 1–8, row 2 cols 1–7, row 3 cols 1–3 (fits Stream Deck Studio and 32-button with reference buttons). Media pool slots 35–60. The repo includes **`template_l3.companionconfig`** (“Lower 3rds” page with this grid plus BAIL, Bug Me, HOME, and reference buttons); the script overwrites only the L3 positions and keeps the rest. The generated config works on **any** Companion page when imported (button references use expressions).
 
 - **Buttons:** Text = “L3” then the person’s name (no theme in label), top-left aligned; black background, white text. Image = L3 graphic cropped to content (no transparent margins), aligned bottom-left.
 - **Order:** Use **`--csv`** so button order matches CSV row order (PNGs matched by name). Without `--csv`, order is alphabetical by filename.
-- **Output:** The Companion config is written into the **same directory as the PNGs** by default as `page6_l3.companionconfig`; use `--out` to override.
+- **Output:** The Companion config is written into the **same directory as the PNGs** by default as `l3.companionconfig`; use `--out` to override.
 
 **Full workflow (CSV → PNGs → Companion page)**
 
@@ -206,13 +206,13 @@ Use the one-command deploy (see [Usage](#usage) above):
 python3 generate_lowerthirds.py --csv people.csv --out_dir output/ --companion
 ```
 
-That writes all PNGs and `page6_l3.companionconfig` into the same folder. Upload the PNGs to ATEM slots 40–65 (same order, up to 26), then import the config into Companion.
+That writes all PNGs and `l3.companionconfig` into the same folder. Upload the PNGs to ATEM slots 35–60 (same order, up to 26), then import the config into Companion and assign it to whichever page you want.
 
 **Two steps (optional):** if you prefer to run the generator and Companion script separately:
 
 ```bash
 python3 generate_lowerthirds.py --csv people.csv --out_dir output/
-python3 companion_l3_page.py --template template_page6_l3.companionconfig --csv people.csv --png-dir output/
+python3 companion_l3_page.py --template template_l3.companionconfig --csv people.csv --png-dir output/
 ```
 
 ### Quick test guide: Companion
@@ -228,7 +228,7 @@ pip install pyyaml pillow
 
 **2. Template page**
 
-The repo includes **`template_page6_l3.companionconfig`** (Companion page 6 “Lower 3rds” with 26 L3 positions plus BAIL, Bug Me, HOME, and reference buttons). Use it as `--template`; the script only overwrites the L3 positions and keeps the rest. To use your own layout, export a page from Companion that has one L3-style button (`mediaPlayerSource`), save it, and pass that file as `--template`.
+The repo includes **`template_l3.companionconfig`** (“Lower 3rds” page with 26 L3 positions plus BAIL, Bug Me, HOME, and reference buttons). Use it as `--template`; the script only overwrites the L3 positions and keeps the rest. To use your own layout, export a page from Companion that has one L3-style button (`mediaPlayerSource`), save it, and pass that file as `--template`.
 
 **3. Generate a few L3 PNGs**
 
@@ -241,14 +241,14 @@ That fills `output/` with PNGs (e.g. `lowerthird_jane_smith_palette_teal.png`, �
 **4. Build the Companion page**
 
 ```bash
-python3 companion_l3_page.py --template template_page6_l3.companionconfig --png-dir output/
+python3 companion_l3_page.py --template template_l3.companionconfig --png-dir output/
 ```
 
-Output is `output/page6_l3.companionconfig` (same folder as the PNGs). The included template is `template_page6_l3.companionconfig` in the repo root.
+Output is `output/l3.companionconfig` (same folder as the PNGs). The included template is `template_l3.companionconfig` in the repo root.
 
 **5. Import into Companion**
 
-In Companion: **Settings → Import** (or paste/load the page). Load `output/page6_l3.companionconfig` and assign it to the target page (e.g. page 6). You should see up to 26 buttons with labels from the PNG names and thumbnail backgrounds; each button triggers the corresponding media pool slot (40–65).
+In Companion: **Settings → Import** (or paste/load the page). Load `output/l3.companionconfig` and assign it to whichever page you want. The config uses expressions for button references, so it works on any page. You should see up to 26 buttons with labels from the PNG names and thumbnail backgrounds; each button triggers the corresponding media pool slot (35–60).
 
 **6. Optional: inject thumbnails into an existing page (`companion_png64.py`)**
 
@@ -264,7 +264,7 @@ PNGs are assigned in **alphabetical order** to buttons that have a media pool so
 
 - **“Template page has no button with mediaPlayerSource”** — Export a page that has at least one button whose action is “set media pool still” (media player 1).
 - **Wrong order of names on buttons** — Use `--csv` so button order matches your CSV row order (PNGs are matched by name). Without `--csv`, order is alphabetical by filename.
-- **Buttons don’t fire the right still** — Media pool slots start at 40 (up to 26 slots: 40–65). Load the same PNGs into those slots on the ATEM in the same order so indices match.
+- **Buttons don’t fire the right still** — Media pool slots are 35–60 (26 slots; pool ends at 60). Load the same PNGs into those slots on the ATEM in the same order so indices match.
 
 **Optional — ATEM media pool upload:**  
 The script does **not** upload to the ATEM by default. Blackmagic doesn’t expose a simple REST API for still upload; options:
@@ -272,11 +272,4 @@ The script does **not** upload to the ATEM by default. Blackmagic doesn’t expo
 - **PyATEMAPI** ([GitHub](https://github.com/mackenly/PyATEMAPI)): run its server against your ATEM IP, then use its HTTP API to upload stills if supported.
 - **atemlib MediaUpload** (e.g. `MediaUpload.exe [atem-ip] [slot] [filename]`): run this per PNG (e.g. in a small script loop) to push files into the media pool before or after generating the Companion page.
 
-If you run an upload tool separately, use the same PNG order (CSV order if you used `--csv`, else alphabetical) and slots 40–65 so the Companion buttons stay in sync.
-
----
-
-<sup>[1]</sup> [Faire Slack – Graphik](https://faire-wholesale.slack.com/archives/CC5448WAG/p1759868613384409)  
-<sup>[2]</sup> [Faire Slack – Nantes](https://faire-wholesale.slack.com/archives/C07QYV5FQET/p1731709269836909)  
-<sup>[3]</sup> [Faire iOS – UIFont+Faire](https://github.com/Faire/ios/blob/main/Modules/ViewCore/Sources/Extensions/UIFont+Faire.swift)  
-<sup>[4]</sup> [Faire Slack – CDN fonts](https://faire-wholesale.slack.com/archives/C08H6DAB5TM/p1747315159424589) (Graphik on cdn.faire.com)
+If you run an upload tool separately, use the same PNG order (CSV order if you used `--csv`, else alphabetical) and slots 35–60 so the Companion buttons stay in sync.

@@ -3,7 +3,7 @@
 Generate a Bitfocus Companion page with up to 26 L3 buttons.
 Layout: row 0 cols 1–8, row 1 cols 1–8, row 2 cols 1–7, row 3 cols 1–3 (fits Stream Deck Studio + 32-button with reference buttons).
 Each button: text "\\nL3\\n<Name>" (no theme), black bg, white text, left:top; png64 = cropped thumbnail, left:bottom.
-Button order: --csv for CSV row order; otherwise alphabetical. Config written to PNG dir as page6_l3.companionconfig by default.
+Button order: --csv for CSV row order; otherwise alphabetical. Config written to PNG dir as l3.companionconfig by default. Works on any Companion page when imported (references use expressions).
 """
 
 from __future__ import annotations
@@ -43,7 +43,8 @@ L3_BUTTON_LAYOUT = (
     + [("3", str(c)) for c in range(1, 4)]  # row 3: 1–3
 )
 MAX_L3_BUTTONS = len(L3_BUTTON_LAYOUT)  # 26
-MEDIA_POOL_START = 40
+# Media pool ends at 60; 26 buttons need slots 35–60.
+MEDIA_POOL_START = 35
 THUMB_SIZE = 72
 
 
@@ -119,8 +120,9 @@ THEME_SUFFIX_RE = re.compile(
 
 
 def filename_to_display_name(filename: str) -> str:
-    """Name only, no theme: lowerthird_jen_burke_palette_teal.png -> Jen Burke."""
+    """Name only, no theme: 35_lowerthird_jen_burke_palette_teal.png -> Jen Burke."""
     stem = Path(filename).stem
+    stem = re.sub(r"^\d+_", "", stem)  # strip media-pool prefix (e.g. 35_)
     if stem.lower().startswith("lowerthird_"):
         stem = stem[11:]
     stem = THEME_SUFFIX_RE.sub("", stem)
@@ -223,6 +225,27 @@ def get_template_button(data: dict) -> Optional[dict]:
     return None
 
 
+# Match location_text that is a single page/row/col (e.g. "5/2/1") so we can make it page-agnostic.
+_LOCATION_PAGE_ROW_COL_RE = re.compile(r"^(\d+)/(\d+)/(\d+)$")
+
+
+def _fix_page_references(obj: Any) -> None:
+    """In-place: replace hardcoded page/row/col (e.g. 5/2/1) with expression so it works on any page."""
+    if isinstance(obj, dict):
+        opts = obj.get("options") or {}
+        loc_text = (opts.get("location_text") or "").strip()
+        if isinstance(loc_text, str):
+            m = _LOCATION_PAGE_ROW_COL_RE.match(loc_text)
+            if m:
+                _page, row, col = m.groups()
+                opts["location_expression"] = f"concat($(this:page), '/', '{row}', '/', '{col}')"
+        for v in obj.values():
+            _fix_page_references(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            _fix_page_references(v)
+
+
 def _load_template(template_path: Path) -> dict:
     """Load template from JSON or YAML. Companion exports JSON (tabs); YAML disallows tabs."""
     raw = template_path.read_text(encoding="utf-8")
@@ -238,7 +261,7 @@ def build_page(
     media_start: int = MEDIA_POOL_START,
     thumb_size: int = THUMB_SIZE,
 ) -> dict:
-    """Build Companion page with one button per PNG; labels and png64 set; media pool 40, 41, ..."""
+    """Build Companion page with one button per PNG; labels and png64 set; media pool 35–60 (26 slots)."""
     data = _load_template(template_path)
 
     template_btn = get_template_button(data)
@@ -301,12 +324,12 @@ def upload_to_atem(png_paths: list[Path], atem_ip: str, media_start: int) -> Non
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=f"Generate Companion page with up to {MAX_L3_BUTTONS} L3 buttons (labels + png64, media pool 40+). Layout: row 0–1 cols 1–8, row 2 cols 1–7, row 3 cols 1–3.")
+    ap = argparse.ArgumentParser(description=f"Generate Companion page with up to {MAX_L3_BUTTONS} L3 buttons (labels + png64, media pool 35–60). Layout: row 0–1 cols 1–8, row 2 cols 1–7, row 3 cols 1–3.")
     ap.add_argument("--template", type=Path, required=True, help="Existing Companion page config to clone button structure from")
     ap.add_argument("--png-dir", type=Path, default=None, help="Folder of L3 PNGs")
     ap.add_argument("--csv", type=Path, default=None, help="CSV with name,title rows; button order = CSV order (match PNGs by name)")
     ap.add_argument("--png-list", type=Path, nargs="+", default=None, help="Explicit list of PNG paths (overrides --png-dir)")
-    ap.add_argument("--out", type=Path, default=None, help="Output .companionconfig path (default: same dir as PNGs, page6_l3.companionconfig)")
+    ap.add_argument("--out", type=Path, default=None, help="Output .companionconfig path (default: same dir as PNGs, l3.companionconfig)")
     ap.add_argument("--media-start", type=int, default=MEDIA_POOL_START, help=f"First media pool index (default {MEDIA_POOL_START})")
     ap.add_argument("--thumb-size", type=int, default=THUMB_SIZE, help=f"Button thumbnail size (default {THUMB_SIZE})")
     ap.add_argument("--atem-ip", type=str, default=None, help="ATEM IP for optional upload (see README for setup)")
@@ -332,9 +355,9 @@ def main() -> None:
     if args.out is None:
         # Default: write config next to the PNGs
         if args.png_dir and args.png_dir.is_dir():
-            args.out = args.png_dir.resolve() / "page6_l3.companionconfig"
+            args.out = args.png_dir.resolve() / "l3.companionconfig"
         else:
-            args.out = png_paths[0].resolve().parent / "page6_l3.companionconfig"
+            args.out = png_paths[0].resolve().parent / "l3.companionconfig"
     else:
         args.out = args.out.resolve()
 
@@ -345,6 +368,7 @@ def main() -> None:
         media_start=args.media_start,
         thumb_size=args.thumb_size,
     )
+    _fix_page_references(data)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
