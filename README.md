@@ -1,6 +1,6 @@
 # FaireL3s
 
-**v0.0.4**
+**v0.0.5**
 
 Generate Faire-style lower-third graphics (1920×1080 transparent PNGs) for video. Name + title on a light panel with accent bar.
 
@@ -118,7 +118,7 @@ Fonts must be present in `font/` (or `fonts/`) for correct rendering; see [Optio
 python3 generate_lowerthirds.py --csv people.csv --out_dir output/ --companion
 ```
 
-Add `--theme palette_teal` (or another theme) if you want. Then upload the PNGs to ATEM slots 40–55 and import `output/page6_l3.companionconfig` into Companion.
+Add `--theme palette_teal` (or another theme) if you want. Then upload the PNGs to ATEM slots 40–65 (up to 26) and import `output/page6_l3.companionconfig` into Companion.
 
 **One lower third:**
 
@@ -190,9 +190,9 @@ Example (output to a new file so you don’t overwrite the original):
 python3 companion_png64.py ~/Downloads/zoom_page5.companionconfig "/Users/tom/Documents/Lower 3rds/Output" --out ~/Downloads/zoom_page5_with_previews.companionconfig
 ```
 
-### Pre-built page: 16 L3 buttons (5/0/1–5/0/8, 5/1/1–5/1/8)
+### Pre-built page: up to 26 L3 buttons
 
-**`companion_l3_page.py`** builds a Companion page with up to 16 L3 buttons (row 0 cols 1–8, row 1 cols 1–8), media pool slots 40–55. The repo includes **`template_page6_l3.companionconfig`** (page 6 “Lower 3rds” with L3 grid plus BAIL, Bug Me, HOME); the script overwrites only the 16 L3 slots and keeps the rest.
+**`companion_l3_page.py`** builds a Companion page with up to **26** L3 buttons. Layout: row 0 cols 1–8, row 1 cols 1–8, row 2 cols 1–7, row 3 cols 1–3 (fits Stream Deck Studio and 32-button with reference buttons). Media pool slots 40–65. The repo includes **`template_page6_l3.companionconfig`** (page 6 “Lower 3rds” with this grid plus BAIL, Bug Me, HOME, and reference buttons); the script overwrites only the L3 positions and keeps the rest.
 
 - **Buttons:** Text = “L3” then the person’s name (no theme in label), top-left aligned; black background, white text. Image = L3 graphic cropped to content (no transparent margins), aligned bottom-left.
 - **Order:** Use **`--csv`** so button order matches CSV row order (PNGs matched by name). Without `--csv`, order is alphabetical by filename.
@@ -206,7 +206,7 @@ Use the one-command deploy (see [Usage](#usage) above):
 python3 generate_lowerthirds.py --csv people.csv --out_dir output/ --companion
 ```
 
-That writes all PNGs and `page6_l3.companionconfig` into the same folder. Upload the PNGs to ATEM slots 40–55 in the same order, then import the config into Companion.
+That writes all PNGs and `page6_l3.companionconfig` into the same folder. Upload the PNGs to ATEM slots 40–65 (same order, up to 26), then import the config into Companion.
 
 **Two steps (optional):** if you prefer to run the generator and Companion script separately:
 
@@ -228,7 +228,7 @@ pip install pyyaml pillow
 
 **2. Template page**
 
-The repo includes **`template_page6_l3.companionconfig`** (Companion page 6 “Lower 3rds” with 16 L3 slots plus BAIL, Bug Me, HOME). Use it as `--template`; the script only overwrites the 16 L3 positions and keeps the rest. To use your own layout, export a page from Companion that has one L3-style button (`mediaPlayerSource`), save it, and pass that file as `--template`.
+The repo includes **`template_page6_l3.companionconfig`** (Companion page 6 “Lower 3rds” with 26 L3 positions plus BAIL, Bug Me, HOME, and reference buttons). Use it as `--template`; the script only overwrites the L3 positions and keeps the rest. To use your own layout, export a page from Companion that has one L3-style button (`mediaPlayerSource`), save it, and pass that file as `--template`.
 
 **3. Generate a few L3 PNGs**
 
@@ -248,7 +248,7 @@ Output is `output/page6_l3.companionconfig` (same folder as the PNGs). The inclu
 
 **5. Import into Companion**
 
-In Companion: **Settings → Import** (or paste/load the page). Load `output/page6_l3.companionconfig` and assign it to the target page (e.g. page 6). You should see up to 16 buttons with labels from the PNG names and thumbnail backgrounds; each button should trigger the corresponding media pool slot (40–55).
+In Companion: **Settings → Import** (or paste/load the page). Load `output/page6_l3.companionconfig` and assign it to the target page (e.g. page 6). You should see up to 26 buttons with labels from the PNG names and thumbnail backgrounds; each button triggers the corresponding media pool slot (40–65).
 
 **6. Optional: inject thumbnails into an existing page (`companion_png64.py`)**
 
@@ -264,7 +264,7 @@ PNGs are assigned in **alphabetical order** to buttons that have a media pool so
 
 - **“Template page has no button with mediaPlayerSource”** — Export a page that has at least one button whose action is “set media pool still” (media player 1).
 - **Wrong order of names on buttons** — Use `--csv` so button order matches your CSV row order (PNGs are matched by name). Without `--csv`, order is alphabetical by filename.
-- **Buttons don’t fire the right still** — Media pool slots are 40–55 by default. Load the same PNGs into those slots on the ATEM (via Companion’s media pool UI or an upload tool) so indices match.
+- **Buttons don’t fire the right still** — Media pool slots start at 40 (up to 26 slots: 40–65). Load the same PNGs into those slots on the ATEM in the same order so indices match.
 
 **Optional — ATEM media pool upload:**  
 The script does **not** upload to the ATEM by default. Blackmagic doesn’t expose a simple REST API for still upload; options:
@@ -272,7 +272,7 @@ The script does **not** upload to the ATEM by default. Blackmagic doesn’t expo
 - **PyATEMAPI** ([GitHub](https://github.com/mackenly/PyATEMAPI)): run its server against your ATEM IP, then use its HTTP API to upload stills if supported.
 - **atemlib MediaUpload** (e.g. `MediaUpload.exe [atem-ip] [slot] [filename]`): run this per PNG (e.g. in a small script loop) to push files into the media pool before or after generating the Companion page.
 
-If you run an upload tool separately, use the same PNG order (CSV order if you used `--csv`, else alphabetical) and slots 40–55 so the Companion buttons stay in sync.
+If you run an upload tool separately, use the same PNG order (CSV order if you used `--csv`, else alphabetical) and slots 40–65 so the Companion buttons stay in sync.
 
 ---
 

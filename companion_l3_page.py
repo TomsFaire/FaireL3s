@@ -1,16 +1,9 @@
 #!/usr/bin/env python3
 """
-Generate a Bitfocus Companion page with 16 L3 buttons at 5/0/1–5/0/8 and 5/1/1–5/1/8.
-Each button: text "\\nL3\\n<Name>" (no theme in label), black bg, white text, alignment left:top,
-png64 = cropped thumbnail (content only, no transparent margins), pngalignment left:bottom.
-
-Button order: use --csv to match CSV row order (PNGs matched by name); otherwise alphabetical.
-
-Usage:
-  python3 companion_l3_page.py --template template_page6_l3.companionconfig --png-dir Output2 --out output/page6_l3.companionconfig
-  python3 companion_l3_page.py --template template_page6_l3.companionconfig --csv people.csv --png-dir Output2 --out output/page6_l3.companionconfig
-
-Template can be JSON or YAML. Output is YAML. Optional: --atem-ip IP.
+Generate a Bitfocus Companion page with up to 26 L3 buttons.
+Layout: row 0 cols 1–8, row 1 cols 1–8, row 2 cols 1–7, row 3 cols 1–3 (fits Stream Deck Studio + 32-button with reference buttons).
+Each button: text "\\nL3\\n<Name>" (no theme), black bg, white text, left:top; png64 = cropped thumbnail, left:bottom.
+Button order: --csv for CSV row order; otherwise alphabetical. Config written to PNG dir as page6_l3.companionconfig by default.
 """
 
 from __future__ import annotations
@@ -41,9 +34,15 @@ except ImportError:
     print("pip install pillow", file=sys.stderr)
     sys.exit(1)
 
-# 16 buttons: row 0 cols 1–8, row 1 cols 1–8. Media pool 40–55.
-DEFAULT_ROWS = 2
-DEFAULT_COLS = 8
+# Layout: row 0 cols 1–8, row 1 cols 1–8, row 2 cols 1–7, row 3 cols 1–3 (26 buttons total).
+# Matches Stream Deck Studio + 32-button layout with reference buttons for overflow.
+L3_BUTTON_LAYOUT = (
+    [("0", str(c)) for c in range(1, 9)]   # row 0: 1–8
+    + [("1", str(c)) for c in range(1, 9)]  # row 1: 1–8
+    + [("2", str(c)) for c in range(1, 8)]  # row 2: 1–7
+    + [("3", str(c)) for c in range(1, 4)]  # row 3: 1–3
+)
+MAX_L3_BUTTONS = len(L3_BUTTON_LAYOUT)  # 26
 MEDIA_POOL_START = 40
 THUMB_SIZE = 72
 
@@ -250,12 +249,10 @@ def build_page(
     # Start from template controls so other buttons (BAIL, HOME, etc.) are preserved
     template_controls = page.get("controls") or {}
     controls = copy.deepcopy(template_controls)
-    n = min(len(png_paths), 16)
-    cols_per_row = 8
+    n = min(len(png_paths), len(L3_BUTTON_LAYOUT))
 
     for i in range(n):
-        row = str(i // cols_per_row)
-        col = str((i % cols_per_row) + 1)
+        row, col = L3_BUTTON_LAYOUT[i]
         source_id = media_start + i
         label = labels[i] if i < len(labels) else filename_to_display_name(png_paths[i].name)
         # Button text: leading newline, then L3, then newline, then name (no theme)
@@ -289,7 +286,7 @@ def upload_to_atem(png_paths: list[Path], atem_ip: str, media_start: int) -> Non
     """Try to upload PNGs to ATEM media pool. Requires external tool or PyATEMAPI server."""
     # PyATEMAPI runs as a server; we could HTTP POST to it if running. Alternatively use atemlib MediaUpload.
     # Check for common tools:
-    for i, path in enumerate(png_paths[:16]):
+    for i, path in enumerate(png_paths[:MAX_L3_BUTTONS]):
         slot = media_start + i
         # Try atemlib MediaUpload if on PATH (Windows/.exe or script)
         try:
@@ -304,7 +301,7 @@ def upload_to_atem(png_paths: list[Path], atem_ip: str, media_start: int) -> Non
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Generate Companion page with 16 L3 buttons (labels + png64 from files, media pool 40–55)")
+    ap = argparse.ArgumentParser(description=f"Generate Companion page with up to {MAX_L3_BUTTONS} L3 buttons (labels + png64, media pool 40+). Layout: row 0–1 cols 1–8, row 2 cols 1–7, row 3 cols 1–3.")
     ap.add_argument("--template", type=Path, required=True, help="Existing Companion page config to clone button structure from")
     ap.add_argument("--png-dir", type=Path, default=None, help="Folder of L3 PNGs")
     ap.add_argument("--csv", type=Path, default=None, help="CSV with name,title rows; button order = CSV order (match PNGs by name)")
@@ -320,10 +317,10 @@ def main() -> None:
         labels = [filename_to_display_name(p.name) for p in png_paths]
     elif args.csv and args.csv.exists() and args.png_dir and args.png_dir.is_dir():
         png_paths, labels = ordered_pngs_from_csv(args.csv.resolve(), args.png_dir)
-        png_paths = png_paths[:16]
-        labels = labels[:16]
+        png_paths = png_paths[:MAX_L3_BUTTONS]
+        labels = labels[:MAX_L3_BUTTONS]
     elif args.png_dir and args.png_dir.is_dir():
-        png_paths = sorted(args.png_dir.resolve().glob("*.png"))[:16]
+        png_paths = sorted(args.png_dir.resolve().glob("*.png"))[:MAX_L3_BUTTONS]
         labels = [filename_to_display_name(p.name) for p in png_paths]
     else:
         raise SystemExit("Provide --png-dir with optional --csv for order, or --png-list.")
