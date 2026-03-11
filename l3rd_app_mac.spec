@@ -1,7 +1,8 @@
-# PyInstaller spec for macOS .app (one-dir). Used by GitHub Actions to build FaireL3s.app.
-# Local build: pyinstaller l3rd_app_mac.spec
-# Output: dist/FaireL3s/ (folder to be wrapped in FaireL3s.app by CI)
+# PyInstaller spec for macOS .app bundle. Used by GitHub Actions and build_mac_app.sh.
+# Build: pyinstaller l3rd_app_mac.spec
+# Output: dist/FaireL3s.app (proper macOS .app with Frameworks, etc.)
 
+import sys
 from pathlib import Path
 
 block_cipher = None
@@ -63,4 +64,15 @@ coll = COLLECT(
     upx=True,
     upx_exclude=[],
     name="FaireL3s",
+)
+
+app = BUNDLE(
+    coll,
+    name="FaireL3s.app",
+    bundle_identifier="com.faire.lowerthirds",
+    info_plist={
+        "CFBundleDisplayName": "Faire Lower 3rds",
+        "CFBundleShortVersionString": "0.0.6",
+        "NSHighResolutionCapable": True,
+    },
 )
