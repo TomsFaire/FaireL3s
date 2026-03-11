@@ -30,6 +30,12 @@ output/*.companionconfig
 # Test data (local only)
 test_*.csv
 
+# PyInstaller / local .app build
+build/
+dist/
+FaireL3s.app/
+FaireL3s-macOS.zip
+
 # macOS custom folder icons
 Icon?
 Icon
