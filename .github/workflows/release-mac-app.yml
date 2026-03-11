@@ -73,7 +73,7 @@ jobs:
 
       - name: Code sign .app (ad-hoc)
         run: |
-          codesign --force --deep --sign - FaireL3s.app
+          codesign --force --sign - FaireL3s.app
 
       - name: Zip .app
         run: |
