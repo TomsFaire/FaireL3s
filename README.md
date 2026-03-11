@@ -7,7 +7,10 @@ Generate Faire-style lower-third graphics (1920×1080 transparent PNGs) for vide
 ## How to run the app
 
 **Option A — Mac .app (easiest)**  
-Download **FaireL3s-macOS.zip** from the [latest release](https://github.com/TomsFaire/FaireL3s/releases). Unzip, then open **Faire Lower 3rds.app**. Your browser opens to the app. Put a `font/` folder next to the app if you have Graphik (or use “Fetch fonts” in the app when on Faire network).
+Download **FaireL3s-macOS.zip** from the [latest release](https://github.com/TomsFaire/FaireL3s/releases). Unzip, then open **Faire Lower 3rds.app** (double-click or right-click → Open). Your browser opens to the app. Put a `font/` folder next to the app if you have Graphik (or use “Fetch fonts” in the app when on Faire network).  
+
+If macOS says the app is **“damaged”** or won’t open: right-click the app → **Open** (and confirm), or in Terminal run:  
+`xattr -cr /path/to/Faire\ Lower\ 3rds.app`
 
 **Option B — From source (web app)**  
 Clone the repo, then:

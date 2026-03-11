@@ -18,6 +18,7 @@ jobs:
       contents: write  # upload release asset
     env:
       RELEASE_TAG: ${{ github.event_name == 'release' && github.ref_name || github.event.inputs.tag }}
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
       - name: Checkout
@@ -66,6 +67,10 @@ jobs:
           </dict>
           </plist>
           PLIST
+
+      - name: Code sign .app (ad-hoc)
+        run: |
+          codesign --force --deep --sign - FaireL3s.app
 
       - name: Zip .app
         run: |
