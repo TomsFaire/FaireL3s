@@ -392,6 +392,10 @@ HTML = """
 
       <div id="status"></div>
     </div>
+
+    <div style="text-align: center; margin-top: 0.5rem;">
+      <button type="button" class="btn btn-secondary" id="quitBtn" style="font-size: 0.8rem; padding: 0.4rem 0.9rem; color: var(--text-muted);">Quit app</button>
+    </div>
   </div>
 
   <script>
@@ -497,6 +501,12 @@ HTML = """
       }
       document.getElementById('generateBtn').disabled = false;
     });
+
+    document.getElementById('quitBtn').addEventListener('click', async () => {
+      if (!confirm('Quit Faire Lower 3rds?')) return;
+      try { await fetch('/quit', { method: 'POST' }); } catch (e) {}
+      document.body.innerHTML = '<p style="text-align:center;margin-top:4rem;font-family:system-ui;color:#6b6b6b;">App stopped. You can close this tab.</p>';
+    });
   </script>
 </body>
 </html>
@@ -590,6 +600,17 @@ def generate() -> tuple[dict, int]:
             return jsonify({"ok": True, "message": f"Saved: {out_file}"}), 200
         except Exception as e:
             return jsonify({"ok": False, "message": str(e)}), 200
+
+
+@app.route("/quit", methods=["POST"])
+def quit_app() -> tuple[dict, int]:
+    """Shut down the Flask server and exit."""
+    func = request.environ.get("werkzeug.server.shutdown")
+    if func:
+        func()
+    else:
+        os._exit(0)
+    return jsonify({"ok": True}), 200
 
 
 def _log_crash(exc: BaseException) -> None:
