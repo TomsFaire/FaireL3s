@@ -2,15 +2,18 @@
 """FaireL3s web app: generate lower thirds from a browser (style, single/CSV, output dir, Companion, Fetch fonts)."""
 from __future__ import annotations
 
+import os
 import platform
 import subprocess
 import sys
+import traceback
 import webbrowser
 from pathlib import Path
 from threading import Timer
 
-# Ensure generator is importable from this directory
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# When not frozen, ensure generator is importable from this directory
+if not getattr(sys, "frozen", False):
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import generate_lowerthirds as gen
 from flask import Flask, request, render_template_string, jsonify
@@ -589,7 +592,26 @@ def generate() -> tuple[dict, int]:
             return jsonify({"ok": False, "message": str(e)}), 200
 
 
+def _log_crash(exc: BaseException) -> None:
+    """Write traceback to a log file so we can diagnose when the .app crashes on launch."""
+    try:
+        log_dir = Path(os.path.expanduser("~/Library/Logs"))
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "FaireL3s-crash.log"
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write("\n---\n")
+            traceback.print_exc(file=f)
+        print(f"FaireL3s crashed. See {log_file}", file=sys.stderr)
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
+
+
 def main() -> None:
+    # When frozen (.app), run with bundle as cwd so resource paths resolve
+    if getattr(sys, "frozen", False):
+        bundle_dir = Path(sys.executable).resolve().parent
+        os.chdir(bundle_dir)
+
     port = 5150
     url = f"http://127.0.0.1:{port}"
 
@@ -597,9 +619,13 @@ def main() -> None:
         webbrowser.open(url)
 
     Timer(0.8, open_browser).start()
-    print(f"FaireL3s {gen.__version__} — open {url}")
+    print(f"FaireL3s {gen.__version__} — open {url}", file=sys.stderr)
     app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        _log_crash(e)
+        raise
