@@ -71,10 +71,6 @@ jobs:
           </plist>
           PLIST
 
-      - name: Code sign .app (ad-hoc)
-        run: |
-          codesign --force --sign - FaireL3s.app
-
       - name: Zip .app
         run: |
           ditto -c -k --sequesterRsrc --keepParent FaireL3s.app FaireL3s-macOS.zip
