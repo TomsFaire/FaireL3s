@@ -27,7 +27,26 @@ Use the theme name with `--theme` when you run the script (e.g. `--theme dark`).
 ## Requirements
 
 - Python 3.9+
-- [Pillow](https://pypi.org/project/Pillow/) (`pip install pillow`)
+- **Pillow** (image generation) and **PyYAML** (Companion config). Install via a virtual environment (recommended on macOS/Homebrew).
+
+### Setup (avoid “externally-managed-environment” on macOS)
+
+On macOS, system Python is often managed by Homebrew and blocks `pip install` system-wide. Use a virtual environment:
+
+```bash
+cd "/path/to/l3rd script"
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Then run any script with the same shell (or activate `.venv` in new terminals):
+
+```bash
+python3 generate_lowerthirds.py --name "Your Name" --title "Your Title" --out output/test.png
+```
+
+To leave the virtual environment: `deactivate`.
 
 ## Fonts (required for correct look)
 
@@ -89,10 +108,10 @@ python3 generate_lowerthirds.py --name "Your Name" --title "Your Title" --out ou
 
 To run a quick local test of the new palette colorways:
 
-1. **Use the project venv** (recommended; has Pillow):
+1. **Use the project venv** (recommended; see [Setup](#setup-avoid-externally-managed-environment-on-macos) if you need to create it and install dependencies):
    ```bash
-   cd /path/to/l3rd\ script
-   source .venv/bin/activate   # or: .venv/bin/python below
+   cd "/path/to/l3rd script"
+   source .venv/bin/activate
    ```
 
 2. **Single lower third** with a new theme (e.g. `palette_teal`):
@@ -219,11 +238,11 @@ python3 companion_l3_page.py --template template_l3.companionconfig --csv people
 
 To test the Companion integration locally (scripts are in the repo but not committed to GitHub):
 
-**1. Dependencies (once)**
+**1. Dependencies (once)** — create and activate a venv, then install (see [Setup](#setup-avoid-externally-managed-environment-on-macos)):
 
 ```bash
-source .venv/bin/activate   # or use system Python
-pip install pyyaml pillow
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
 **2. Template page**
