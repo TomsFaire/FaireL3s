@@ -71,6 +71,16 @@ jobs:
           </plist>
           PLIST
 
+      - name: Fix Python library path for .app
+        run: |
+          mkdir -p FaireL3s.app/Contents/Frameworks
+          MACOS=FaireL3s.app/Contents/MacOS
+          if [ -f "$MACOS/Python" ]; then
+            cp -f "$MACOS/Python" FaireL3s.app/Contents/Frameworks/Python
+          elif ls "$MACOS"/libpython*.dylib 1>/dev/null 2>&1; then
+            cp -f "$MACOS"/libpython*.dylib FaireL3s.app/Contents/Frameworks/Python
+          fi
+
       - name: Zip .app
         run: |
           ditto -c -k --sequesterRsrc --keepParent FaireL3s.app FaireL3s-macOS.zip
