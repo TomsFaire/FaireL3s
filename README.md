@@ -1,8 +1,8 @@
 # FaireL3s
 
-**v0.0.5**
+**v0.0.6**
 
-Generate Faire-style lower-third graphics (1920×1080 transparent PNGs) for video. Name + title on a light panel with accent bar.
+Generate Faire-style lower-third graphics (1920×1080 transparent PNGs) for video. Name + title on a light panel with accent bar. Use the **desktop app** or the CLI.
 
 ## Pick a style 
 
@@ -47,6 +47,36 @@ python3 generate_lowerthirds.py --name "Your Name" --title "Your Title" --out ou
 ```
 
 To leave the virtual environment: `deactivate`.
+
+### Run as app (web UI)
+
+No Tk required. From the repo directory with the venv activated:
+
+```bash
+python3 app.py
+```
+
+Your browser will open to **http://127.0.0.1:5150**. The page lets you:
+
+- **Style** — Choose a theme from the dropdown (same as the table above).
+- **Input** — **Single**: enter Name and Title. **CSV file**: choose a file with `name,title` headers.
+- **Generate Companion page** — Check to write `l3.companionconfig` into the output folder (batch/CSV only).
+- **Output folder** — Click “Select output folder…” to open your system folder picker; the chosen path is used for PNGs and the optional Companion config.
+- **Fetch fonts** — Download Graphik from the Faire CDN into `font/` (requires network/VPN).
+- **Generate** — Runs the same logic as the CLI and shows a status message.
+
+Single mode writes one PNG (e.g. `lowerthird_jane_smith.png` or `lowerthird_jane_smith_dark.png`). CSV mode writes one PNG per row and, if “Generate Companion page” is checked, also writes `l3.companionconfig` into the output folder.
+
+### Building a standalone app (PyInstaller)
+
+To build a double-clickable app so you don’t need Python or the venv installed:
+
+```bash
+pip install pyinstaller
+pyinstaller l3rd_app.spec
+```
+
+The executable is created in `dist/FaireL3s` (or `dist/FaireL3s.exe` on Windows). Place a `font/` folder next to it (or use “Fetch fonts” from the GUI if the app can reach the Faire CDN). If you use the Companion feature, ensure `template_l3.companionconfig` is in the same directory as the spec when building so it is included in the bundle.
 
 ## Fonts (required for correct look)
 

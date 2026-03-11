@@ -17,10 +17,22 @@ plan.md
 *.bak
 .DS_Store
 
+# Fonts (downloaded or local; do not commit)
+font/
+
 # Output (generate locally)
 *.png
 out/
 Output/
+output_26/
+output/*.companionconfig
+
+# Test data (local only)
+test_*.csv
+
+# macOS custom folder icons
+Icon?
+Icon
 
 # Example lower thirds (one per theme) are committed
 !output/

@@ -24,7 +24,7 @@ Fonts:
 """
 from __future__ import annotations
 
-__version__ = "0.0.5"
+__version__ = "0.0.6"
 
 import argparse
 import csv
@@ -45,7 +45,14 @@ FAIRE_GRAPHIK_FONTS = [
 
 from PIL import Image, ImageDraw, ImageFont
 
-THIS_DIR = Path(__file__).resolve().parent
+def _base_dir() -> Path:
+    """Script or bundle root so style JSONs and companion script are found. When frozen, use MEIPASS."""
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS)
+    return Path(__file__).resolve().parent
+
+
+THIS_DIR = _base_dir()
 
 # Faire brand typeface: Graphik (sans) for UI. Fallback: Inter. iOS bundles Graphik + Nantes.
 SEMIBOLD_CANDIDATES = [
@@ -61,8 +68,15 @@ REGULAR_CANDIDATES = [
 
 
 def _font_search_dirs() -> list[Path]:
-    """Directories to search for font files. Order: Graphik folder, font/fonts, Inter folder."""
+    """Directories to search for font files. When frozen, also check next to the executable."""
     out: list[Path] = []
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).resolve().parent
+        for name in ("font", "fonts"):
+            d = exe_dir / name
+            if d.is_dir():
+                out.append(d)
+                break
     for child in THIS_DIR.iterdir():
         if not child.is_dir():
             continue
@@ -247,9 +261,89 @@ def slugify(s: str) -> str:
     return s or "lowerthird"
 
 
+def run_batch(
+    csv_path: Path,
+    out_dir: Path,
+    theme: str,
+    media_start: int = 35,
+    write_companion: bool = False,
+    companion_template: Optional[Path] = None,
+) -> int:
+    """Generate lower-third PNGs from a CSV (name,title). Returns number of PNGs written.
+    If write_companion is True, also writes l3.companionconfig into out_dir."""
+    style = load_style(theme)
+    csv_path = csv_path.resolve()
+    if not csv_path.exists():
+        raise FileNotFoundError(csv_path)
+    out_dir = Path(out_dir).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    count = 0
+    with csv_path.open(newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        if not reader.fieldnames or "name" not in reader.fieldnames or "title" not in reader.fieldnames:
+            raise ValueError(f"CSV must have headers name,title. Found: {reader.fieldnames}")
+
+        for row in reader:
+            name = (row.get("name") or "").strip()
+            title = (row.get("title") or "").strip()
+            if not name or not title:
+                continue
+
+            slot = media_start + count
+            base = f"{slot}_lowerthird_{slugify(name)}"
+            if theme != "default":
+                base = f"{base}_{theme}"
+            out_path = out_dir / f"{base}.png"
+            render_lowerthird(name, title, out_path, style)
+            count += 1
+
+    if write_companion and count > 0:
+        template = companion_template or (THIS_DIR / "template_l3.companionconfig")
+        template = template.resolve()
+        if not template.exists():
+            raise FileNotFoundError(f"Companion template not found: {template}")
+
+        if getattr(sys, "frozen", False):
+            # Run in-process when packaged (no separate Python to run companion script)
+            old_argv = sys.argv
+            sys.argv = [
+                "companion_l3_page",
+                "--template", str(template),
+                "--csv", str(csv_path),
+                "--png-dir", str(out_dir),
+                "--media-start", str(media_start),
+            ]
+            try:
+                import companion_l3_page
+                companion_l3_page.main()
+            finally:
+                sys.argv = old_argv
+        else:
+            companion_script = THIS_DIR / "companion_l3_page.py"
+            if not companion_script.exists():
+                raise FileNotFoundError(f"Companion script not found: {companion_script}")
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(companion_script),
+                    "--template", str(template),
+                    "--csv", str(csv_path),
+                    "--png-dir", str(out_dir),
+                    "--media-start", str(media_start),
+                ],
+                check=True,
+            )
+
+    return count
+
+
 def fetch_faire_fonts() -> Path:
-    """Download Graphik from Faire CDN into font/. For internal use."""
-    d = THIS_DIR / "font"
+    """Download Graphik from Faire CDN into font/. For internal use. When frozen, uses dir next to executable."""
+    if getattr(sys, "frozen", False):
+        d = Path(sys.executable).resolve().parent / "font"
+    else:
+        d = THIS_DIR / "font"
     d.mkdir(exist_ok=True)
     for url, filename in FAIRE_GRAPHIK_FONTS:
         path = d / filename
@@ -286,62 +380,26 @@ def main() -> None:
         fetch_faire_fonts()
         return
 
-    style = load_style(args.theme)
-
     if args.csv:
         csv_path = Path(args.csv)
         if not csv_path.is_absolute() and not csv_path.exists():
             csv_path = THIS_DIR / csv_path
         out_dir = Path(args.out_dir)
-        if not csv_path.exists():
-            raise FileNotFoundError(csv_path)
-
         media_start = getattr(args, "media_start", 35)
-        with csv_path.open(newline="", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            if not reader.fieldnames or "name" not in reader.fieldnames or "title" not in reader.fieldnames:
-                raise ValueError(f"CSV must have headers name,title. Found: {reader.fieldnames}")
-
-            index = 0
-            for row in reader:
-                name = (row.get("name") or "").strip()
-                title = (row.get("title") or "").strip()
-                if not name or not title:
-                    continue
-
-                slot = media_start + index
-                base = f"{slot}_lowerthird_{slugify(name)}"
-                if args.theme != "default":
-                    base = f"{base}_{args.theme}"
-                out_path = out_dir / f"{base}.png"
-                render_lowerthird(name, title, out_path, style)
-                index += 1
-
-        print(f"Done. Wrote PNGs to: {out_dir.resolve()}")
-
+        count = run_batch(
+            csv_path,
+            out_dir,
+            args.theme,
+            media_start=media_start,
+            write_companion=args.companion,
+            companion_template=args.companion_template,
+        )
+        print(f"Done. Wrote {count} PNGs to: {out_dir.resolve()}")
         if args.companion:
-            companion_script = THIS_DIR / "companion_l3_page.py"
-            if not companion_script.exists():
-                raise FileNotFoundError(f"Companion script not found: {companion_script}. Run companion_l3_page.py separately.")
-            template = args.companion_template or (THIS_DIR / "template_l3.companionconfig")
-            template = template.resolve()
-            if not template.exists():
-                raise FileNotFoundError(f"Companion template not found: {template}")
-            out_dir.mkdir(parents=True, exist_ok=True)
-            csv_path = csv_path.resolve()
-            subprocess.run(
-                [
-                    sys.executable,
-                    str(companion_script),
-                    "--template", str(template),
-                    "--csv", str(csv_path),
-                    "--png-dir", str(out_dir.resolve()),
-                    "--media-start", str(media_start),
-                ],
-                check=True,
-            )
             print(f"Companion config written to {out_dir.resolve() / 'l3.companionconfig'}")
         return
+
+    style = load_style(args.theme)
 
     if not (args.name and args.title and args.out):
         ap.error("Single render mode requires --name, --title, --out OR provide --csv for batch mode.")
