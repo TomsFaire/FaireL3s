@@ -2,7 +2,9 @@
 # Build: pyinstaller l3rd_app_mac.spec
 # Output: dist/FaireL3s.app (proper macOS .app with Frameworks, etc.)
 
-import sys
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.abspath(SPEC)))
+from _version import __version__ as APP_VERSION
 from pathlib import Path
 
 block_cipher = None
@@ -72,7 +74,7 @@ app = BUNDLE(
     bundle_identifier="com.faire.lowerthirds",
     info_plist={
         "CFBundleDisplayName": "Faire Lower 3rds",
-        "CFBundleShortVersionString": "0.0.6",
+        "CFBundleShortVersionString": APP_VERSION,
         "NSHighResolutionCapable": True,
     },
 )

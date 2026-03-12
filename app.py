@@ -2,14 +2,16 @@
 """FaireL3s web app: generate lower thirds from a browser (style, single/CSV, output dir, Companion, Fetch fonts)."""
 from __future__ import annotations
 
+import logging
 import os
 import platform
 import subprocess
 import sys
+import threading
+import time
 import traceback
 import webbrowser
 from pathlib import Path
-from threading import Timer
 
 # When not frozen, ensure generator is importable from this directory
 if not getattr(sys, "frozen", False):
@@ -17,6 +19,8 @@ if not getattr(sys, "frozen", False):
 
 import generate_lowerthirds as gen
 from flask import Flask, request, render_template_string, jsonify
+
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8 MB for CSV uploads
@@ -38,6 +42,8 @@ THEME_LABELS = {
 }
 
 THEME_KEYS = list(gen.THEME_FILES)
+
+CSV_ROW_LIMIT = 500
 
 
 def _theme_swatches() -> list[dict]:
@@ -98,7 +104,11 @@ def _pick_folder_native() -> str | None:
             if out.returncode != 0:
                 return None
             return out.stdout.strip() or None
-    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        logger.debug("Folder picker failed: %s", e)
+        return None
+    except subprocess.SubprocessError as e:
+        logger.debug("Folder picker subprocess error: %s", e)
         return None
     return None
 
@@ -372,7 +382,7 @@ HTML = """
         <div class="field">
           <label>Output folder</label>
           <div class="btn-row">
-            <button type="button" class="btn btn-secondary" id="pickOutputDir">Select folder…</button>
+            <button type="button" class="btn btn-secondary" id="pickOutputDir">Select folder...</button>
             <span class="muted" id="outputDirLabel">No folder chosen</span>
           </div>
           <input type="hidden" name="output_dir" id="outputDir">
@@ -441,7 +451,7 @@ HTML = """
     });
 
     document.getElementById('fetchFonts').addEventListener('click', async () => {
-      document.getElementById('fontStatus').textContent = 'Fetching…';
+      document.getElementById('fontStatus').textContent = 'Fetching...';
       try {
         const r = await fetch('/fetch-fonts', { method: 'POST' });
         const j = await r.json();
@@ -490,7 +500,7 @@ HTML = """
         formData.set('title', title);
       }
 
-      setStatus('Generating…', 'pending');
+      setStatus('Generating...', 'pending');
       document.getElementById('generateBtn').disabled = true;
       try {
         const r = await fetch('/generate', { method: 'POST', body: formData });
@@ -538,25 +548,29 @@ def fetch_fonts() -> tuple[dict, int]:
     try:
         d = gen.fetch_faire_fonts()
         return jsonify({"ok": True, "message": f"Fonts saved to {d}"}), 200
+    except OSError as e:
+        logger.debug("Font fetch I/O error: %s", e)
+        return jsonify({"ok": False, "message": str(e)}), 500
     except Exception as e:
-        return jsonify({"ok": False, "message": str(e)}), 200
+        logger.debug("Font fetch error: %s", e)
+        return jsonify({"ok": False, "message": str(e)}), 500
 
 
 @app.route("/generate", methods=["POST"])
 def generate() -> tuple[dict, int]:
     theme = (request.form.get("theme") or "default").strip()
     if theme not in gen.THEME_FILES:
-        return jsonify({"ok": False, "message": f"Unknown theme: {theme}"}), 200
+        return jsonify({"ok": False, "message": f"Unknown theme: {theme}"}), 400
 
     output_dir = (request.form.get("output_dir") or "").strip()
     if not output_dir:
-        return jsonify({"ok": False, "message": "Output folder is required."}), 200
+        return jsonify({"ok": False, "message": "Output folder is required."}), 400
 
     out_path = Path(output_dir)
     try:
         out_path = out_path.resolve()
     except Exception as e:
-        return jsonify({"ok": False, "message": f"Invalid output path: {e}"}), 200
+        return jsonify({"ok": False, "message": f"Invalid output path: {e}"}), 400
 
     csv_mode = request.files.get("csv_file") is not None and request.files.get("csv_file").filename
     write_companion = request.form.get("companion") == "1"
@@ -564,11 +578,46 @@ def generate() -> tuple[dict, int]:
     if csv_mode:
         f = request.files["csv_file"]
         if not f or not f.filename:
-            return jsonify({"ok": False, "message": "Please upload a CSV file."}), 200
+            return jsonify({"ok": False, "message": "Please upload a CSV file."}), 400
+
+        # Read the uploaded data so we can validate before writing to disk
+        csv_data = f.read()
+        if not csv_data.strip():
+            return jsonify({"ok": False, "message": "The uploaded CSV file is empty."}), 400
+
+        # Validate CSV structure: check required columns and row limit
+        import csv as csv_module
+        import io
+        try:
+            text = csv_data.decode("utf-8-sig")
+        except (UnicodeDecodeError, ValueError) as e:
+            return jsonify({"ok": False, "message": f"CSV encoding error: {e}"}), 400
+
+        try:
+            reader = csv_module.DictReader(io.StringIO(text))
+            fieldnames = reader.fieldnames
+            if not fieldnames:
+                return jsonify({"ok": False, "message": "CSV has no header row."}), 400
+            missing = [col for col in ("name", "title") if col not in fieldnames]
+            if missing:
+                return jsonify({
+                    "ok": False,
+                    "message": f"CSV is missing required column(s): {', '.join(missing)}. Found: {list(fieldnames)}",
+                }), 400
+            rows = list(reader)
+        except csv_module.Error as e:
+            return jsonify({"ok": False, "message": f"Could not parse CSV: {e}"}), 400
+
+        if len(rows) > CSV_ROW_LIMIT:
+            return jsonify({
+                "ok": False,
+                "message": f"CSV has {len(rows)} rows; maximum allowed is {CSV_ROW_LIMIT}.",
+            }), 400
+
         # Save uploaded file to a temp path; run_batch expects a path
         import tempfile
         with tempfile.NamedTemporaryFile(mode="wb", suffix=".csv", delete=False) as tmp:
-            tmp.write(f.read())
+            tmp.write(csv_data)
             tmp_path = Path(tmp.name)
         try:
             count = gen.run_batch(
@@ -582,13 +631,22 @@ def generate() -> tuple[dict, int]:
             if write_companion:
                 msg += ". Companion config written."
             return jsonify({"ok": True, "message": msg}), 200
+        except (FileNotFoundError, OSError) as e:
+            logger.debug("Batch generation I/O error: %s", e)
+            return jsonify({"ok": False, "message": f"File error: {e}"}), 500
+        except ValueError as e:
+            logger.debug("Batch generation value error: %s", e)
+            return jsonify({"ok": False, "message": str(e)}), 400
+        except Exception as e:
+            logger.debug("Batch generation error: %s", e)
+            return jsonify({"ok": False, "message": str(e)}), 500
         finally:
             tmp_path.unlink(missing_ok=True)
     else:
         name = (request.form.get("name") or "").strip()
         title = (request.form.get("title") or "").strip()
         if not name or not title:
-            return jsonify({"ok": False, "message": "Name and title are required."}), 200
+            return jsonify({"ok": False, "message": "Name and title are required."}), 400
         try:
             style = gen.load_style(theme)
             base = f"lowerthird_{gen.slugify(name)}"
@@ -598,18 +656,22 @@ def generate() -> tuple[dict, int]:
             out_path.mkdir(parents=True, exist_ok=True)
             gen.render_lowerthird(name, title, out_file, style)
             return jsonify({"ok": True, "message": f"Saved: {out_file}"}), 200
+        except (FileNotFoundError, OSError) as e:
+            logger.debug("Single generation I/O error: %s", e)
+            return jsonify({"ok": False, "message": f"File error: {e}"}), 500
         except Exception as e:
-            return jsonify({"ok": False, "message": str(e)}), 200
+            logger.debug("Single generation error: %s", e)
+            return jsonify({"ok": False, "message": str(e)}), 500
 
 
 @app.route("/quit", methods=["POST"])
 def quit_app() -> tuple[dict, int]:
-    """Shut down the Flask server and exit."""
-    func = request.environ.get("werkzeug.server.shutdown")
-    if func:
-        func()
-    else:
+    """Shut down the Flask server and exit. Response is sent first, then process exits."""
+    def _exit_after_response() -> None:
+        time.sleep(0.3)  # let the response reach the client
         os._exit(0)
+
+    threading.Thread(target=_exit_after_response, daemon=True).start()
     return jsonify({"ok": True}), 200
 
 
@@ -627,6 +689,19 @@ def _log_crash(exc: BaseException) -> None:
         traceback.print_exc(file=sys.stderr)
 
 
+def _wait_and_open_browser(url: str, timeout: float = 10.0) -> None:
+    """Poll until the server is ready, then open the browser."""
+    import urllib.request
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            urllib.request.urlopen(url, timeout=0.5)
+            webbrowser.open(url)
+            return
+        except Exception:
+            time.sleep(0.1)
+
+
 def main() -> None:
     # When frozen (.app), run with bundle as cwd so resource paths resolve
     if getattr(sys, "frozen", False):
@@ -636,11 +711,8 @@ def main() -> None:
     port = 5150
     url = f"http://127.0.0.1:{port}"
 
-    def open_browser() -> None:
-        webbrowser.open(url)
-
-    Timer(0.8, open_browser).start()
-    print(f"FaireL3s {gen.__version__} — open {url}", file=sys.stderr)
+    threading.Thread(target=_wait_and_open_browser, args=(url,), daemon=True).start()
+    print(f"FaireL3s {gen.__version__} -- open {url}", file=sys.stderr)
     app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False)
 
 
