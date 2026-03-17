@@ -380,6 +380,11 @@ HTML = """
         </div>
 
         <div class="field">
+          <label>Media pool start slot</label>
+          <input type="number" name="media_start" id="mediaStart" value="35" min="1" max="60" style="width:100px;">
+        </div>
+
+        <div class="field">
           <label>ATEM IP (optional — direct media pool upload)</label>
           <div class="btn-row">
             <input type="text" name="atem_ip" id="atemIp" placeholder="192.168.1.240" style="flex:1;">
@@ -489,6 +494,7 @@ HTML = """
       formData.set('theme', theme);
       formData.set('output_dir', outputDir);
       formData.set('companion', isCsv && companion.checked ? '1' : '0');
+      formData.set('media_start', document.getElementById('mediaStart').value || '35');
       const atemIpVal = document.getElementById('atemIp').value.trim();
       if (atemIpVal) formData.set('atem_ip', atemIpVal);
 
@@ -536,10 +542,11 @@ HTML = """
       setStatus('Uploading to ATEM...', 'pending');
       document.getElementById('uploadAtemBtn').disabled = true;
       try {
+        const mediaStart = parseInt(document.getElementById('mediaStart').value) || 35;
         const r = await fetch('/upload-atem', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ atem_ip: atemIp, output_dir: outputDir }),
+          body: JSON.stringify({ atem_ip: atemIp, output_dir: outputDir, media_start: mediaStart }),
         });
         const j = await r.json();
         setStatus(j.message || (j.ok ? 'Upload complete.' : 'Upload failed.'), j.ok ? 'ok' : 'error');
@@ -612,6 +619,10 @@ def generate() -> tuple[dict, int]:
     csv_mode = request.files.get("csv_file") is not None and request.files.get("csv_file").filename
     write_companion = request.form.get("companion") == "1"
     atem_ip = (request.form.get("atem_ip") or "").strip() or None
+    try:
+        media_start = int(request.form.get("media_start") or 35)
+    except (ValueError, TypeError):
+        media_start = 35
 
     if csv_mode:
         f = request.files["csv_file"]
@@ -662,7 +673,7 @@ def generate() -> tuple[dict, int]:
                 tmp_path,
                 out_path,
                 theme,
-                media_start=35,
+                media_start=media_start,
                 write_companion=write_companion,
                 atem_ip=atem_ip,
             )
@@ -723,9 +734,14 @@ def upload_atem() -> tuple[dict, int]:
     if not png_paths:
         return jsonify({"ok": False, "message": f"No PNGs found in {out_path}"}), 400
 
+    try:
+        media_start = int(data.get("media_start") or 35)
+    except (ValueError, TypeError):
+        media_start = 35
+
     import companion_l3_page as clp
     labels = [clp.filename_to_display_name(p.name) for p in png_paths]
-    result = clp.upload_to_atem(png_paths, atem_ip, media_start=35, labels=labels)
+    result = clp.upload_to_atem(png_paths, atem_ip, media_start=media_start, labels=labels)
     status_code = 200 if result["ok"] else 500
     return jsonify(result), status_code
 
