@@ -11,7 +11,18 @@ __pycache__/
 # Local / private data (do not commit)
 people.csv
 org_chart_people.csv
+
+# AI / Claude docs (never commit)
 plan.md
+PLAN.md
+CLAUDE.md
+claude.md
+.claude/
+memory/
+*.plan.md
+.agents/
+.skills
+skills-lock.json
 
 # Backups and OS
 *.bak
