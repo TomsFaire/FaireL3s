@@ -268,6 +268,7 @@ def run_batch(
     media_start: int = 35,
     write_companion: bool = False,
     companion_template: Optional[Path] = None,
+    atem_ip: Optional[str] = None,
 ) -> int:
     """Generate lower-third PNGs from a CSV (name,title). Returns number of PNGs written.
     If write_companion is True, also writes l3.companionconfig into out_dir."""
@@ -297,6 +298,14 @@ def run_batch(
             out_path = out_dir / f"{base}.png"
             render_lowerthird(name, title, out_path, style)
             count += 1
+
+    # Write slot manifest alongside PNGs
+    if count > 0:
+        import companion_l3_page
+        png_paths = sorted(out_dir.resolve().glob("*.png"))
+        labels = [companion_l3_page.filename_to_display_name(p.name) for p in png_paths]
+        manifest = companion_l3_page.write_slot_manifest(png_paths, labels, out_dir.resolve(), media_start)
+        print(f"Wrote slot manifest to {manifest}")
 
     if write_companion and count > 0:
         template = companion_template or (THIS_DIR / "template_l3.companionconfig")
@@ -334,6 +343,25 @@ def run_batch(
                 ],
                 check=True,
             )
+
+        # Also generate setup page
+        import companion_l3_page as clp
+        png_paths = sorted(out_dir.resolve().glob("*.png"))
+        labels = [clp.filename_to_display_name(p.name) for p in png_paths]
+        setup_data = clp.build_setup_page(png_paths, labels, media_start)
+        setup_path = out_dir.resolve() / "l3_setup.companionconfig"
+        import yaml as _yaml
+        with setup_path.open("w", encoding="utf-8") as f:
+            _yaml.dump(setup_data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        print(f"Wrote setup page to {setup_path}")
+
+    # ATEM upload if requested
+    if atem_ip and count > 0:
+        import companion_l3_page as clp
+        png_paths = sorted(out_dir.resolve().glob("*.png"))
+        labels = [clp.filename_to_display_name(p.name) for p in png_paths]
+        result = clp.upload_to_atem(png_paths, atem_ip, media_start, labels=labels)
+        print(result["message"])
 
     return count
 
@@ -373,6 +401,8 @@ def main() -> None:
                     help="Companion template path for --companion (default: template_l3.companionconfig next to script).")
     ap.add_argument("--media-start", type=int, default=35,
                     help="First media pool slot (default 35). When batching from CSV, filenames are prefixed with slot number so Finder order matches CSV/upload order.")
+    ap.add_argument("--atem-ip", type=str, default=None,
+                    help="ATEM switcher IP address for direct media pool upload via pyatem.")
     args = ap.parse_args()
 
     if args.fetch_fonts:
@@ -393,6 +423,7 @@ def main() -> None:
             media_start=media_start,
             write_companion=args.companion,
             companion_template=args.companion_template,
+            atem_ip=args.atem_ip,
         )
         print(f"Done. Wrote {count} PNGs to: {out_dir.resolve()}")
         if args.companion:

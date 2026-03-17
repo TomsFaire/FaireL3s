@@ -300,7 +300,8 @@ def build_page(
         source_id = (media_start + i) - 1
         label = labels[i] if i < len(labels) else filename_to_display_name(png_paths[i].name)
         # Button text: leading newline, then L3, then newline, then name (no theme)
-        button_text = f"\nL3\n{label}"
+        slot_num = media_start + i
+        button_text = f"\nL3 #{slot_num}\n{label}"
         png64 = png_to_base64_cropped(png_paths[i], thumb_size)
 
         id_map: dict[str, str] = {}
@@ -326,22 +327,310 @@ def build_page(
     return data
 
 
-def upload_to_atem(png_paths: list[Path], atem_ip: str, media_start: int) -> None:
-    """Try to upload PNGs to ATEM media pool. Requires external tool or PyATEMAPI server."""
-    # PyATEMAPI runs as a server; we could HTTP POST to it if running. Alternatively use atemlib MediaUpload.
-    # Check for common tools:
-    for i, path in enumerate(png_paths[:MAX_L3_BUTTONS]):
-        slot = media_start + i
-        # Try atemlib MediaUpload if on PATH (Windows/.exe or script)
+def write_slot_manifest(
+    png_paths: list[Path],
+    labels: list[str],
+    out_dir: Path,
+    media_start: int = MEDIA_POOL_START,
+) -> Path:
+    """Write slot_manifest.csv mapping slot numbers to filenames and names."""
+    manifest_path = out_dir / "slot_manifest.csv"
+    with manifest_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["slot", "filename", "name"])
+        for i, (png, label) in enumerate(zip(png_paths[:MAX_L3_BUTTONS], labels[:MAX_L3_BUTTONS])):
+            writer.writerow([media_start + i, png.name, label])
+    return manifest_path
+
+
+try:
+    import pyatem.transport as _pyatem_transport
+    HAS_PYATEM = True
+except ImportError:
+    HAS_PYATEM = False
+
+
+def _premultiply_alpha(img: "Image.Image") -> "Image.Image":
+    """Premultiply RGBA channels by alpha for ATEM upload."""
+    img = img.convert("RGBA")
+    r, g, b, a = img.split()
+    r = r.point(lambda i: i)  # ensure mode
+    from PIL import ImageMath
+    r = ImageMath.eval("convert(a * c / 255, 'L')", a=a, c=r)
+    g = ImageMath.eval("convert(a * c / 255, 'L')", a=a, c=g)
+    b = ImageMath.eval("convert(a * c / 255, 'L')", a=a, c=b)
+    return Image.merge("RGBA", (r, g, b, a))
+
+
+def upload_to_atem(
+    png_paths: list[Path],
+    atem_ip: str,
+    media_start: int,
+    labels: list[str] | None = None,
+    progress_callback: Any = None,
+) -> dict:
+    """Upload PNGs to ATEM media pool slots via pyatem.
+
+    Returns dict with 'ok' bool, 'uploaded' count, 'errors' list, 'message' str.
+    progress_callback(slot, label, i, total) is called per file if provided.
+    """
+    n = min(len(png_paths), MAX_L3_BUTTONS)
+    if labels is None:
+        labels = [filename_to_display_name(p.name) for p in png_paths]
+
+    if not HAS_PYATEM:
+        return {
+            "ok": False,
+            "uploaded": 0,
+            "errors": ["pyatem not installed. Run: pip install pyatem"],
+            "message": "pyatem not installed. Run: pip install pyatem",
+        }
+
+    import time as _time
+    errors: list[str] = []
+    uploaded = 0
+
+    try:
+        switcher = _pyatem_transport.UdpProtocol()
+        switcher.connect(atem_ip)
+        # Wait for connection handshake
+        deadline = _time.time() + 10
+        while not switcher.connected and _time.time() < deadline:
+            switcher.loop()
+            _time.sleep(0.05)
+        if not switcher.connected:
+            return {
+                "ok": False,
+                "uploaded": 0,
+                "errors": [f"Could not connect to ATEM at {atem_ip} (timeout)"],
+                "message": f"Could not connect to ATEM at {atem_ip} (timeout)",
+            }
+    except Exception as e:
+        return {
+            "ok": False,
+            "uploaded": 0,
+            "errors": [f"ATEM connection error: {e}"],
+            "message": f"ATEM connection error: {e}",
+        }
+
+    for i in range(n):
+        slot = media_start + i  # 1-based slot number
+        slot_index = slot - 1   # 0-based index for pyatem
+        label = labels[i] if i < len(labels) else f"L3 {i+1}"
+        if progress_callback:
+            progress_callback(slot, label, i, n)
+
         try:
-            subprocess.run(
-                ["MediaUpload", atem_ip, str(slot), str(path)],
-                check=False,
-                capture_output=True,
-            )
-        except FileNotFoundError:
-            pass
-    print("ATEM upload: use PyATEMAPI server (see README) or atemlib MediaUpload.exe to upload PNGs to the switcher.", file=sys.stderr)
+            img = Image.open(png_paths[i]).convert("RGBA")
+            # ATEM expects 1920x1080 RGBA premultiplied
+            if img.size != (1920, 1080):
+                img = img.resize((1920, 1080), Image.Resampling.LANCZOS)
+            img = _premultiply_alpha(img)
+            frame_data = img.tobytes()
+
+            # Upload still to media pool
+            switcher.upload_still(slot_index, frame_data, label)
+
+            # Process upload packets
+            upload_deadline = _time.time() + 30
+            while _time.time() < upload_deadline:
+                switcher.loop()
+                _time.sleep(0.01)
+                # Check if upload is complete (no pending transfers)
+                if not hasattr(switcher, '_transfers') or not switcher._transfers:
+                    break
+
+            uploaded += 1
+        except Exception as e:
+            errors.append(f"Slot {slot} ({label}): {e}")
+            # Retry once
+            try:
+                _time.sleep(0.5)
+                switcher.loop()
+                img = Image.open(png_paths[i]).convert("RGBA")
+                if img.size != (1920, 1080):
+                    img = img.resize((1920, 1080), Image.Resampling.LANCZOS)
+                img = _premultiply_alpha(img)
+                frame_data = img.tobytes()
+                switcher.upload_still(slot_index, frame_data, label)
+                upload_deadline = _time.time() + 30
+                while _time.time() < upload_deadline:
+                    switcher.loop()
+                    _time.sleep(0.01)
+                    if not hasattr(switcher, '_transfers') or not switcher._transfers:
+                        break
+                uploaded += 1
+                errors.pop()  # remove the error since retry succeeded
+            except Exception as e2:
+                errors.append(f"Slot {slot} ({label}) retry also failed: {e2}")
+
+    try:
+        switcher.disconnect()
+    except Exception:
+        pass
+
+    ok = uploaded > 0 and len(errors) == 0
+    parts = [f"Uploaded {uploaded}/{n} stills to ATEM at {atem_ip}."]
+    if errors:
+        parts.append(f" Errors: {'; '.join(errors)}")
+    message = "".join(parts)
+
+    return {"ok": ok, "uploaded": uploaded, "errors": errors, "message": message}
+
+
+def build_setup_page(
+    png_paths: list[Path],
+    labels: list[str],
+    media_start: int = MEDIA_POOL_START,
+) -> dict:
+    """Build a Companion 'Setup' page with upload buttons for each L3 still.
+
+    Each button uses the ATEM module's mediaPoolUploadStill action to upload
+    a specific PNG file to the correct media pool slot. An 'Upload All' master
+    button chains all uploads sequentially.
+
+    Requires ATEM Companion module with mediaPoolUploadStill action support.
+    """
+    n = min(len(png_paths), MAX_L3_BUTTONS)
+
+    controls: dict[str, dict] = {}
+    upload_action_ids: list[str] = []
+
+    for i in range(n):
+        row, col = L3_BUTTON_LAYOUT[i]
+        slot = media_start + i
+        slot_index = slot - 1  # 0-based for ATEM protocol
+        label = labels[i] if i < len(labels) else f"L3 {i+1}"
+        png_path = str(png_paths[i].resolve())
+
+        action_id = _new_id()
+        upload_action_ids.append(action_id)
+
+        btn: dict[str, Any] = {
+            "type": "button",
+            "style": {
+                "text": f"Upload #{slot}\n{label}",
+                "size": "auto",
+                "color": 16777215,      # white text
+                "bgcolor": 1118481,     # dark blue: #111111
+                "alignment": "center:center",
+                "png64": None,
+                "pngalignment": "center:center",
+                "show_topbar": "default",
+            },
+            "options": {
+                "relativeDelay": False,
+                "rotaryActions": False,
+                "stepAutoProgress": True,
+            },
+            "feedbacks": [],
+            "steps": {
+                "0": {
+                    "action_sets": {
+                        "down": [
+                            {
+                                "id": action_id,
+                                "instance": "bmd-atem",
+                                "definitionId": "mediaPoolUploadStill",
+                                "options": {
+                                    "slot": slot_index,
+                                    "filepath": png_path,
+                                    "name": label,
+                                },
+                            },
+                            {
+                                "id": _new_id(),
+                                "instance": "internal",
+                                "definitionId": "button_text",
+                                "options": {
+                                    "label": f"Done #{slot}\n{label}",
+                                },
+                            },
+                        ],
+                        "up": [],
+                    },
+                    "options": {"runWhileHeld": 0},
+                },
+            },
+        }
+
+        if row not in controls:
+            controls[row] = {}
+        controls[row][col] = btn
+
+    # 'Upload All' master button at row 3, col 7 (bottom right area)
+    master_row, master_col = "3", "7"
+    master_down: list[dict] = []
+    for i in range(n):
+        row_ref, col_ref = L3_BUTTON_LAYOUT[i]
+        master_down.append({
+            "id": _new_id(),
+            "instance": "internal",
+            "definitionId": "button_press",
+            "options": {
+                "location_text": f"0/{row_ref}/{col_ref}",
+                "location_expression": f"concat($(this:page), '/', '{row_ref}', '/', '{col_ref}')",
+            },
+        })
+        # Small delay between uploads to avoid overwhelming the ATEM
+        if i < n - 1:
+            master_down.append({
+                "id": _new_id(),
+                "instance": "internal",
+                "definitionId": "wait",
+                "options": {"time": 2000},
+            })
+    master_down.append({
+        "id": _new_id(),
+        "instance": "internal",
+        "definitionId": "button_text",
+        "options": {"label": f"All Done\n({n} stills)"},
+    })
+
+    master_btn: dict[str, Any] = {
+        "type": "button",
+        "style": {
+            "text": f"Upload All\n({n} stills)",
+            "size": "auto",
+            "color": 16777215,
+            "bgcolor": 26214,       # blue: #006666
+            "alignment": "center:center",
+            "png64": None,
+            "pngalignment": "center:center",
+            "show_topbar": "default",
+        },
+        "options": {
+            "relativeDelay": False,
+            "rotaryActions": False,
+            "stepAutoProgress": True,
+        },
+        "feedbacks": [],
+        "steps": {
+            "0": {
+                "action_sets": {
+                    "down": master_down,
+                    "up": [],
+                },
+                "options": {"runWhileHeld": 0},
+            },
+        },
+    }
+
+    if master_row not in controls:
+        controls[master_row] = {}
+    controls[master_row][master_col] = master_btn
+
+    page = {
+        "name": "L3 Setup — Upload Stills",
+        "controls": controls,
+        "gridSize": {"minColumn": 0, "maxColumn": 8, "minRow": 0, "maxRow": 4},
+    }
+
+    return {
+        "version": 4,
+        "type": "page",
+        "page": page,
+    }
 
 
 def main() -> None:
@@ -395,8 +684,22 @@ def main() -> None:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
     print(f"Wrote {len(png_paths)} buttons to {args.out}")
+
+    # Write slot manifest
+    out_dir = args.out.parent
+    manifest = write_slot_manifest(png_paths, labels, out_dir, args.media_start)
+    print(f"Wrote slot manifest to {manifest}")
+
+    # Write setup page
+    setup_data = build_setup_page(png_paths, labels, args.media_start)
+    setup_path = out_dir / "l3_setup.companionconfig"
+    with setup_path.open("w", encoding="utf-8") as f:
+        yaml.dump(setup_data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    print(f"Wrote setup page to {setup_path}")
+
     if args.atem_ip:
-        upload_to_atem(png_paths, args.atem_ip, args.media_start)
+        result = upload_to_atem(png_paths, args.atem_ip, args.media_start, labels=labels)
+        print(result["message"], file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -380,6 +380,14 @@ HTML = """
         </div>
 
         <div class="field">
+          <label>ATEM IP (optional — direct media pool upload)</label>
+          <div class="btn-row">
+            <input type="text" name="atem_ip" id="atemIp" placeholder="192.168.1.240" style="flex:1;">
+            <button type="button" class="btn btn-secondary" id="uploadAtemBtn" title="Upload generated PNGs to ATEM media pool">Upload to ATEM</button>
+          </div>
+        </div>
+
+        <div class="field">
           <label>Output folder</label>
           <div class="btn-row">
             <button type="button" class="btn btn-secondary" id="pickOutputDir">Select folder...</button>
@@ -481,6 +489,8 @@ HTML = """
       formData.set('theme', theme);
       formData.set('output_dir', outputDir);
       formData.set('companion', isCsv && companion.checked ? '1' : '0');
+      const atemIpVal = document.getElementById('atemIp').value.trim();
+      if (atemIpVal) formData.set('atem_ip', atemIpVal);
 
       if (isCsv) {
         const file = document.getElementById('csvFile').files[0];
@@ -510,6 +520,33 @@ HTML = """
         setStatus('Error: ' + err.message, 'error');
       }
       document.getElementById('generateBtn').disabled = false;
+    });
+
+    document.getElementById('uploadAtemBtn').addEventListener('click', async () => {
+      const atemIp = document.getElementById('atemIp').value.trim();
+      const outputDir = document.getElementById('outputDir').value.trim();
+      if (!atemIp) {
+        setStatus('Please enter the ATEM IP address.', 'error');
+        return;
+      }
+      if (!outputDir) {
+        setStatus('Please select an output folder with generated PNGs first.', 'error');
+        return;
+      }
+      setStatus('Uploading to ATEM...', 'pending');
+      document.getElementById('uploadAtemBtn').disabled = true;
+      try {
+        const r = await fetch('/upload-atem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ atem_ip: atemIp, output_dir: outputDir }),
+        });
+        const j = await r.json();
+        setStatus(j.message || (j.ok ? 'Upload complete.' : 'Upload failed.'), j.ok ? 'ok' : 'error');
+      } catch (err) {
+        setStatus('Error: ' + err.message, 'error');
+      }
+      document.getElementById('uploadAtemBtn').disabled = false;
     });
 
     document.getElementById('quitBtn').addEventListener('click', async () => {
@@ -574,6 +611,7 @@ def generate() -> tuple[dict, int]:
 
     csv_mode = request.files.get("csv_file") is not None and request.files.get("csv_file").filename
     write_companion = request.form.get("companion") == "1"
+    atem_ip = (request.form.get("atem_ip") or "").strip() or None
 
     if csv_mode:
         f = request.files["csv_file"]
@@ -626,6 +664,7 @@ def generate() -> tuple[dict, int]:
                 theme,
                 media_start=35,
                 write_companion=write_companion,
+                atem_ip=atem_ip,
             )
             msg = f"Saved {count} PNGs to {out_path}"
             if write_companion:
@@ -662,6 +701,33 @@ def generate() -> tuple[dict, int]:
         except Exception as e:
             logger.debug("Single generation error: %s", e)
             return jsonify({"ok": False, "message": str(e)}), 500
+
+
+@app.route("/upload-atem", methods=["POST"])
+def upload_atem() -> tuple[dict, int]:
+    """Upload previously generated PNGs from output_dir to ATEM media pool."""
+    data = request.get_json(silent=True) or {}
+    atem_ip = (data.get("atem_ip") or "").strip()
+    output_dir = (data.get("output_dir") or "").strip()
+
+    if not atem_ip:
+        return jsonify({"ok": False, "message": "ATEM IP address is required."}), 400
+    if not output_dir:
+        return jsonify({"ok": False, "message": "Output directory is required."}), 400
+
+    out_path = Path(output_dir).resolve()
+    if not out_path.is_dir():
+        return jsonify({"ok": False, "message": f"Directory not found: {out_path}"}), 400
+
+    png_paths = sorted(out_path.glob("*.png"))
+    if not png_paths:
+        return jsonify({"ok": False, "message": f"No PNGs found in {out_path}"}), 400
+
+    import companion_l3_page as clp
+    labels = [clp.filename_to_display_name(p.name) for p in png_paths]
+    result = clp.upload_to_atem(png_paths, atem_ip, media_start=35, labels=labels)
+    status_code = 200 if result["ok"] else 500
+    return jsonify(result), status_code
 
 
 @app.route("/quit", methods=["POST"])
