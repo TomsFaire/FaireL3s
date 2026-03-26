@@ -344,22 +344,52 @@ def write_slot_manifest(
 
 
 try:
-    import pyatem.transport as _pyatem_transport
+    from pyatem.protocol import AtemProtocol
+    from pyatem.media import rgb_to_atem, rle_encode
     HAS_PYATEM = True
 except ImportError:
     HAS_PYATEM = False
+    AtemProtocol = None  # type: ignore[misc, assignment]
+    rgb_to_atem = None  # type: ignore[misc, assignment]
+    rle_encode = None  # type: ignore[misc, assignment]
+
+
+def check_atem_connection(atem_ip: str, timeout_seconds: float = 5.0) -> dict:
+    """Check if we can connect to an ATEM at the given IP.
+
+    Returns dict with 'ok' bool and 'message' str.
+    Use this before triggering uploads so users get a clear error if the switcher is unreachable.
+    """
+    if not HAS_PYATEM:
+        return {
+            "ok": False,
+            "message": "pyatem not installed. Run: pip install pyatem (or reinstall the app with ATEM support).",
+        }
+    import time as _time
+    try:
+        switcher = AtemProtocol(ip=atem_ip)
+        switcher.connect()
+        deadline = _time.time() + timeout_seconds
+        while not switcher.connected and _time.time() < deadline:
+            switcher.loop()
+            _time.sleep(0.05)
+        if not switcher.connected:
+            return {"ok": False, "message": f"Cannot reach ATEM at {atem_ip}. Check the IP and that the switcher is on."}
+        return {"ok": True, "message": f"Connected to ATEM at {atem_ip}."}
+    except Exception as e:
+        return {"ok": False, "message": f"ATEM connection error: {e}"}
 
 
 def _premultiply_alpha(img: "Image.Image") -> "Image.Image":
-    """Premultiply RGBA channels by alpha for ATEM upload."""
+    """Premultiply RGBA channels by alpha for ATEM upload. Uses getdata/putdata (PIL.ImageMath.eval was removed in Pillow 10+)."""
     img = img.convert("RGBA")
-    r, g, b, a = img.split()
-    r = r.point(lambda i: i)  # ensure mode
-    from PIL import ImageMath
-    r = ImageMath.eval("convert(a * c / 255, 'L')", a=a, c=r)
-    g = ImageMath.eval("convert(a * c / 255, 'L')", a=a, c=g)
-    b = ImageMath.eval("convert(a * c / 255, 'L')", a=a, c=b)
-    return Image.merge("RGBA", (r, g, b, a))
+    data = list(img.getdata())
+    out = [
+        (r * a // 255, g * a // 255, b * a // 255, a)
+        for r, g, b, a in data
+    ]
+    img.putdata(out)
+    return img
 
 
 def upload_to_atem(
@@ -389,11 +419,11 @@ def upload_to_atem(
     import time as _time
     errors: list[str] = []
     uploaded = 0
+    STILL_STORE = 1  # ATEM media pool still store
 
     try:
-        switcher = _pyatem_transport.UdpProtocol()
-        switcher.connect(atem_ip)
-        # Wait for connection handshake
+        switcher = AtemProtocol(ip=atem_ip)
+        switcher.connect()
         deadline = _time.time() + 10
         while not switcher.connected and _time.time() < deadline:
             switcher.loop()
@@ -413,61 +443,56 @@ def upload_to_atem(
             "message": f"ATEM connection error: {e}",
         }
 
+    def _pending_upload(sw: "AtemProtocol") -> bool:
+        return sw.transfer is not None or (
+            STILL_STORE in sw.transfer_queue and len(sw.transfer_queue[STILL_STORE]) > 0
+        )
+
     for i in range(n):
         slot = media_start + i  # 1-based slot number
-        slot_index = slot - 1   # 0-based index for pyatem
+        slot_index = slot - 1   # 0-based index for media pool
         label = labels[i] if i < len(labels) else f"L3 {i+1}"
         if progress_callback:
             progress_callback(slot, label, i, n)
 
         try:
             img = Image.open(png_paths[i]).convert("RGBA")
-            # ATEM expects 1920x1080 RGBA premultiplied
             if img.size != (1920, 1080):
                 img = img.resize((1920, 1080), Image.Resampling.LANCZOS)
             img = _premultiply_alpha(img)
             frame_data = img.tobytes()
+            # Encode to ATEM format (rgb_to_atem needs 4 args including premultiply; we already premultiplied)
+            atem_bytes = rgb_to_atem(frame_data, 1920, 1080, premultiply=False)
+            encoded = rle_encode(atem_bytes)
 
-            # Upload still to media pool
-            switcher.upload_still(slot_index, frame_data, label)
+            switcher.upload(STILL_STORE, slot_index, encoded, compress=False, compressed=True, name=label, description=label)
 
-            # Process upload packets
             upload_deadline = _time.time() + 30
-            while _time.time() < upload_deadline:
+            while _time.time() < upload_deadline and _pending_upload(switcher):
                 switcher.loop()
                 _time.sleep(0.01)
-                # Check if upload is complete (no pending transfers)
-                if not hasattr(switcher, '_transfers') or not switcher._transfers:
-                    break
 
             uploaded += 1
         except Exception as e:
             errors.append(f"Slot {slot} ({label}): {e}")
-            # Retry once
             try:
                 _time.sleep(0.5)
-                switcher.loop()
                 img = Image.open(png_paths[i]).convert("RGBA")
                 if img.size != (1920, 1080):
                     img = img.resize((1920, 1080), Image.Resampling.LANCZOS)
                 img = _premultiply_alpha(img)
                 frame_data = img.tobytes()
-                switcher.upload_still(slot_index, frame_data, label)
+                atem_bytes = rgb_to_atem(frame_data, 1920, 1080, premultiply=False)
+                encoded = rle_encode(atem_bytes)
+                switcher.upload(STILL_STORE, slot_index, encoded, compress=False, compressed=True, name=label, description=label)
                 upload_deadline = _time.time() + 30
-                while _time.time() < upload_deadline:
+                while _time.time() < upload_deadline and _pending_upload(switcher):
                     switcher.loop()
                     _time.sleep(0.01)
-                    if not hasattr(switcher, '_transfers') or not switcher._transfers:
-                        break
                 uploaded += 1
-                errors.pop()  # remove the error since retry succeeded
+                errors.pop()
             except Exception as e2:
                 errors.append(f"Slot {slot} ({label}) retry also failed: {e2}")
-
-    try:
-        switcher.disconnect()
-    except Exception:
-        pass
 
     ok = uploaded > 0 and len(errors) == 0
     parts = [f"Uploaded {uploaded}/{n} stills to ATEM at {atem_ip}."]

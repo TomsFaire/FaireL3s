@@ -390,6 +390,7 @@ HTML = """
             <input type="text" name="atem_ip" id="atemIp" placeholder="192.168.1.240" style="flex:1;">
             <button type="button" class="btn btn-secondary" id="uploadAtemBtn" title="Upload generated PNGs to ATEM media pool">Upload to ATEM</button>
           </div>
+          <p class="muted" style="margin-top:0.35rem; font-size:0.85rem;">Generate L3 images first (button below). This uploads those PNGs to the ATEM. With CSV mode, if you enter an ATEM IP and click Generate, it will generate and upload in one step.</p>
         </div>
 
         <div class="field">
@@ -539,9 +540,21 @@ HTML = """
         setStatus('Please select an output folder with generated PNGs first.', 'error');
         return;
       }
-      setStatus('Uploading to ATEM...', 'pending');
       document.getElementById('uploadAtemBtn').disabled = true;
+      setStatus('Checking ATEM connection...', 'pending');
       try {
+        const checkRes = await fetch('/check-atem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ atem_ip: atemIp }),
+        });
+        const checkJson = await checkRes.json();
+        if (!checkJson.ok) {
+          setStatus(checkJson.message || 'ATEM not reachable.', 'error');
+          document.getElementById('uploadAtemBtn').disabled = false;
+          return;
+        }
+        setStatus('Uploading to ATEM...', 'pending');
         const mediaStart = parseInt(document.getElementById('mediaStart').value) || 35;
         const r = await fetch('/upload-atem', {
           method: 'POST',
@@ -712,6 +725,19 @@ def generate() -> tuple[dict, int]:
         except Exception as e:
             logger.debug("Single generation error: %s", e)
             return jsonify({"ok": False, "message": str(e)}), 500
+
+
+@app.route("/check-atem", methods=["POST"])
+def check_atem() -> tuple[dict, int]:
+    """Verify ATEM is reachable at the given IP before attempting uploads."""
+    data = request.get_json(silent=True) or {}
+    atem_ip = (data.get("atem_ip") or "").strip()
+    if not atem_ip:
+        return jsonify({"ok": False, "message": "ATEM IP address is required."}), 400
+    import companion_l3_page as clp
+    result = clp.check_atem_connection(atem_ip)
+    status_code = 200 if result["ok"] else 503
+    return jsonify(result), status_code
 
 
 @app.route("/upload-atem", methods=["POST"])

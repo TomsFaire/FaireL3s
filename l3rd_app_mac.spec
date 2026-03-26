@@ -24,6 +24,8 @@ if (BASE / "template_l3.companionconfig").exists():
 hiddenimports = [
     "companion_l3_page",
     "PIL.Image", "PIL.ImageDraw", "PIL.ImageFont", "yaml", "flask", "werkzeug",
+    "pyatem", "pyatem.transport", "pyatem.protocol", "pyatem.media",
+    "usb", "usb.core", "usb.util", "usb.backend.libusb1",
 ]
 
 a = Analysis(

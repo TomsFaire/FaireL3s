@@ -17,15 +17,18 @@ If the app doesn’t start (no browser, nothing in Activity Monitor): run it fro
 Any crash after launch is also written to `~/Library/Logs/FaireL3s-crash.log`.
 
 **Option B — From source (web app)**  
-Clone the repo, then:
+Clone the repo, then (use Python 3.9–3.13; 3.14 can have venv issues):
 
 ```bash
 cd "/path/to/l3rd script"
-python3 -m venv .venv
+python3.13 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python3 app.py
+python app.py
 ```
+
+If you don’t have `python3.13`, use `python3.12` or `python3` in the venv command. If your default `python3` is 3.14 and venv fails, create the venv with an explicit 3.13:  
+`python3.13 -m venv .venv313 && source .venv313/bin/activate` then `pip install -r requirements.txt` and `python app.py`.
 
 Your browser opens at http://127.0.0.1:5150.
 

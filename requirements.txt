@@ -2,5 +2,7 @@ Pillow>=9.0.0
 PyYAML>=6.0
 Flask>=3.0.0
 
-# Optional: direct ATEM media pool upload (pip install pyatem)
-# pyatem>=1.1.0
+# ATEM media pool upload (used by Upload to ATEM and CSV generate)
+# pyatem.transport imports usb at top level, so pyusb must be bundled for the .app
+pyatem>=0.10.0
+pyusb>=1.2.0
