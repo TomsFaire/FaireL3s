@@ -41,11 +41,19 @@ output/*.companionconfig
 # Test data (local only)
 test_*.csv
 
+# Git worktrees
+.worktrees/
+
 # PyInstaller / local .app build
 build/
 dist/
 FaireL3s.app/
 FaireL3s-macOS.zip
+
+# Electrobun build artifacts
+electrobun/node_modules/
+electrobun/dist/
+electrobun/resources/python-backend/
 
 # macOS custom folder icons
 Icon?

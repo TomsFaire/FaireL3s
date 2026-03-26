@@ -2,6 +2,8 @@
 """FaireL3s web app: generate lower thirds from a browser (style, single/CSV, output dir, Companion, Fetch fonts)."""
 from __future__ import annotations
 
+import argparse
+import json
 import logging
 import os
 import platform
@@ -810,7 +812,27 @@ def _wait_and_open_browser(url: str, timeout: float = 10.0) -> None:
             time.sleep(0.1)
 
 
+def _wait_and_signal_ready(url: str, port: int, timeout: float = 10.0) -> None:
+    """Poll until the server is ready, then print a JSON ready signal to stdout."""
+    import urllib.request
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            urllib.request.urlopen(url, timeout=0.5)
+            print(json.dumps({"ready": True, "port": port}), flush=True)
+            return
+        except Exception:
+            time.sleep(0.1)
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(description="FaireL3s lower-thirds generator")
+    parser.add_argument(
+        "--no-browser", action="store_true",
+        help="Start headless (don't open a browser window)",
+    )
+    args = parser.parse_args()
+
     # When frozen (.app), run with bundle as cwd so resource paths resolve
     if getattr(sys, "frozen", False):
         bundle_dir = Path(sys.executable).resolve().parent
@@ -819,7 +841,10 @@ def main() -> None:
     port = 5150
     url = f"http://127.0.0.1:{port}"
 
-    threading.Thread(target=_wait_and_open_browser, args=(url,), daemon=True).start()
+    if args.no_browser:
+        threading.Thread(target=_wait_and_signal_ready, args=(url, port), daemon=True).start()
+    else:
+        threading.Thread(target=_wait_and_open_browser, args=(url,), daemon=True).start()
     print(f"FaireL3s {gen.__version__} -- open {url}", file=sys.stderr)
     app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False)
 
