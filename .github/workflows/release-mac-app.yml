@@ -1,4 +1,4 @@
-# Build a macOS .app when a release is published and upload it as a release asset.
+# Build a macOS .app (Electrobun + PyInstaller backend) when a release is published.
 name: Release macOS app
 
 on:
@@ -9,7 +9,7 @@ on:
       tag:
         description: 'Release tag to upload build to'
         required: true
-        default: '0.0.6'
+        default: '0.0.8'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -32,17 +32,37 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install dependencies
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build .app with PyInstaller
-        run: pyinstaller -y l3rd_app_mac.spec
+      - name: Build Python backend (PyInstaller one-folder)
+        run: pyinstaller -y l3rd_backend.spec
+
+      - name: Copy backend into Electrobun resources
+        run: |
+          rm -rf electrobun/resources/python-backend
+          cp -R dist/FaireL3s/ electrobun/resources/python-backend/
+
+      - name: Build Electrobun app
+        run: |
+          cd electrobun
+          bun install
+          bun run build
 
       - name: Zip .app
-        run: ditto -c -k --sequesterRsrc --keepParent dist/FaireL3s.app FaireL3s-macOS.zip
+        run: |
+          APP_PATH="$(find electrobun/dist -name '*.app' -maxdepth 2 | head -1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: Could not find .app in electrobun/dist/"
+            exit 1
+          fi
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" FaireL3s-macOS.zip
 
       - name: Upload to release
         env:

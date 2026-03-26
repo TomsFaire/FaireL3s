@@ -1,0 +1,13 @@
+{
+  "name": "faire-lowerthirds",
+  "version": "0.0.8",
+  "private": true,
+  "scripts": {
+    "start": "electrobun dev",
+    "dev": "electrobun dev --watch",
+    "build": "electrobun build"
+  },
+  "dependencies": {
+    "electrobun": "^1.16.0"
+  }
+}
