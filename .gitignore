@@ -41,6 +41,9 @@ output/*.companionconfig
 # Test data (local only)
 test_*.csv
 
+# Git worktrees
+.worktrees/
+
 # PyInstaller / local .app build
 build/
 dist/
